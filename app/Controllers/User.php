@@ -121,4 +121,29 @@ class User
             }
         }
     }
+    /**
+     * @param string $data
+     * @return void
+     * @throws \Exception
+     */
+    public function userSearch(string $data): void
+    {
+        session_start();
+        $db = Database::connect();
+        $userId = $_SESSION['user_data']['userId'] ?? '';
+        if (Roles::checkRoles($db, $userId)) {
+            $sql = "SELECT u.name as user_name, u.id, u.login,u.email, f.name as directory_name, fs.name as file_name FROM `users` u LEFT JOIN folders f ON u.id = f.user_id LEFT JOIN files fs ON f.id = fs.directory_id WHERE u.email = :email";
+            $statement = $db->prepare($sql);
+            $statement->execute(['email' => $data]);
+            $user = $statement->fetchAll(\PDO::FETCH_ASSOC);
+            if (!$user) {
+                http_response_code(400);
+                echo json_encode(array("message" => "User not found"));
+                die();
+            } else {
+                http_response_code(200);
+                echo json_encode(array("user" => $user));
+            }
+        }
+    }
 }

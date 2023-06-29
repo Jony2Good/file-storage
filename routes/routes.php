@@ -28,4 +28,10 @@ Router::get('/file/{id}', File::class, 'getCurrentFile', true);
 Router::delete('/file/{id}', File::class, 'deleteFile');
 Router::put('/file', File::class, 'changeFile');
 
+Router::get('/user/search/{$id}', User::class, 'userSearch', true);
+
+Router::get('/files/share/{id}', File::class, 'getSharingFiles', true);
+Router::put('/files/share/{id}/{user_id}', File::class, 'grantAccessFile', true);
+Router::delete('/files/share/{id}/{user_id}', File::class, 'stopAccessingFile');
+
 Router::enable();
