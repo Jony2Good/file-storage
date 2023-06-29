@@ -1,6 +1,6 @@
 <?php
 
-namespace app\Controllers;
+namespace Controllers;
 
 use app\Database\Database;
 use app\Services\CheckTokens;
@@ -463,115 +463,6 @@ class File
                     http_response_code(401);
                     echo json_encode(array("error" => "File not exist or file error"));
                 }
-            }
-        }
-    }
-
-    /**
-     * @param string $id
-     * @return void
-     */
-    public function getSharingFiles(string $id): void
-    {
-        session_start();
-        $db = Database::connect();
-        $user = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $user)) {
-            $sql = "SELECT f.user_file_name, uf.user_id  FROM `users_files` uf 
-                    LEFT JOIN files f ON f.id = uf.file_id WHERE uf.file_id = '$id'";
-            $statement = $db->prepare($sql);
-            $statement->execute();
-            $response = $statement->fetchAll(\PDO::FETCH_GROUP | \PDO::FETCH_COLUMN);
-            if (!$response) {
-                http_response_code(401);
-                echo json_encode(array("error" => "File not exist or file error"));
-            } else {
-                $newRes = [];
-                foreach ($response as $file => $value) {
-                    $newRes[] = [
-                        'file' => $file,
-                        'user_id' => $value
-                    ];
-                }
-                http_response_code(200);
-                echo json_encode($newRes);
-            }
-        }
-    }
-
-    /**
-     * @param string $fileId
-     * @param string $userId
-     * @return void
-     */
-    public function grantAccessFile(string $fileId, string $userId): void
-    {
-        session_start();
-        $db = Database::connect();
-        $user = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $user)) {
-            $sql = "SELECT `id`, `user_file_name` as file_name FROM `files` WHERE `id` = '$fileId'";
-            $statement = $db->prepare($sql);
-            $statement->execute();
-            $response = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (!$response) {
-                http_response_code(401);
-                echo json_encode(array("error" => "File not exist or file error"));
-                die();
-            } else {
-                $sql = "SELECT `id` FROM `users_files` WHERE `user_id` = '$userId' AND `file_id` = '$fileId'";
-                $statement = $db->prepare($sql);
-                $statement->execute();
-                $res = $statement->fetchColumn();
-                if ($res > 0) {
-                    http_response_code(401);
-                    echo json_encode(array("error" => "User {$userId} already has access to the file {$fileId}"));
-                    die();
-                } else {
-                    $sql = "INSERT INTO `users_files` (`id`, `user_id`, `file_id`) VALUES (null, :user_id, :fileId)";
-                    $statement = $db->prepare($sql);
-                    $statement->execute(['user_id' => $userId, 'fileId' => $fileId]);
-                    http_response_code(200);
-                    echo json_encode(array(
-                        "user" => $userId,
-                        "file" => $fileId,
-                        "file_name" => $response['file_name'],
-                        "status" => "file access granted"
-                    ));
-                }
-            }
-        }
-    }
-
-    /**
-     * @param string $fileId
-     * @param string $userId
-     * @return void
-     */
-    public function stopAccessingFile(string $fileId, string $userId): void
-    {
-        session_start();
-        $db = Database::connect();
-        $user = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $user)) {
-            $sql = "SELECT `id` FROM `users_files` WHERE `file_id` = :fileId AND `user_id` = :userId";
-            $statement = $db->prepare($sql);
-            $statement->execute(['fileId' => $fileId, 'userId' => $userId]);
-            $response = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (!$response) {
-                http_response_code(401);
-                echo json_encode(array("error" => "File not exist or user access error"));
-                die();
-            } else {
-                $sql = "DELETE FROM `users_files` WHERE `file_id` = :fileId AND `user_id` = :userId";
-                $statement = $db->prepare($sql);
-                $statement->execute(['fileId' => $fileId, 'userId' => $userId]);
-                http_response_code(200);
-                echo json_encode(array(
-                    "user" => $userId,
-                    "file_id" => $fileId,
-                    "status" => "file access terminated"
-                ));
             }
         }
     }

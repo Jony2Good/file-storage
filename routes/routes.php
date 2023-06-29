@@ -17,4 +17,15 @@ Router::get('/admin/user/{id}', User::class, 'getUser', true);
 Router::delete('/admin/user/{id}', User::class, 'deleteUser');
 Router::put('/admin/user', User::class, 'update');
 
+Router::post('/directory', File::class, 'createDirectory', true);
+Router::get('/directory/{id}', File::class, 'getDirectory', true);
+Router::put('/directory', File::class, 'renameDirectory');
+Router::delete('/directory/{id}', File::class, 'deleteDirectory');
+
+Router::post('/file', File::class, 'createFile', true, true);
+Router::get('/file', File::class, 'getFiles');
+Router::get('/file/{id}', File::class, 'getCurrentFile', true);
+Router::delete('/file/{id}', File::class, 'deleteFile');
+Router::put('/file', File::class, 'changeFile');
+
 Router::enable();
