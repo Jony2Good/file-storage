@@ -2,6 +2,9 @@
 
 namespace app\Database;
 
+use function config\configDb;
+use function config\dbOptions;
+
 class Database
 {
     /**
@@ -9,8 +12,8 @@ class Database
      */
     public static function connect(): object
     {
-        $config = require_once "../config/db.php";
-        $options = require_once "../config/options.php";
+        $config = configDb();
+        $options = dbOptions();
         $db = null;
         if (@$config['enable']) {
             try {

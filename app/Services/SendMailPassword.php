@@ -4,6 +4,7 @@ namespace app\Services;
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
+use function config\mailOptions;
 
 class SendMailPassword
 {
@@ -13,7 +14,7 @@ class SendMailPassword
      */
     public function sendMail(string $email): void
     {
-        $config = require_once "../config/mail_settings.php";
+        $config = mailOptions();
         $mail = new PHPMailer();
         try {
             $mail->isSMTP();

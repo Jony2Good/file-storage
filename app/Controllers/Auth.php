@@ -1,6 +1,6 @@
 <?php
 
-namespace Controllers;
+namespace app\Controllers;
 
 use app\Database\Database;
 use app\Services\CheckTokens;
@@ -8,7 +8,6 @@ use app\Services\GeneratePass;
 use app\Services\Roles;
 use app\Services\SendMailPassword;
 use app\Services\ValidationData;
-use function app\Controllers\setcookie;
 
 class Auth
 {

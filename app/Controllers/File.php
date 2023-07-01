@@ -1,6 +1,6 @@
 <?php
 
-namespace Controllers;
+namespace app\Controllers;
 
 use app\Database\Database;
 use app\Services\CheckTokens;
