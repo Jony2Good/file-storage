@@ -3,9 +3,9 @@
 namespace app\Controllers;
 
 use app\Database\Database;
+use app\Database\DbRequests;
 use app\Services\CheckTokens;
 use app\Services\GeneratePass;
-use app\Services\Roles;
 use app\Services\SendMailPassword;
 use app\Services\ValidationData;
 
@@ -23,7 +23,6 @@ class Auth
             echo json_encode(array("error" => "Bad request"));
             die();
         }
-        $db = Database::connect();
         $name = $data["name"] ?? "";
         $login = $data["login"] ?? "";
         $email = $data["email"] ?? "";
@@ -35,7 +34,7 @@ class Auth
             echo json_encode(array("error" => "Entering personal information incorrect"));
             die();
         }
-        if (!ValidationData::checkEmailExistence($db, $email)) {
+        if (!ValidationData::checkEmailExistence($email)) {
             http_response_code(400);
             echo json_encode(array("error" => "Email {$email} is already exist"));
             die();
@@ -43,11 +42,8 @@ class Auth
         if ($password === $pasConfirm) {
             $passwordHash = password_hash($data["password"], PASSWORD_BCRYPT);
 
-            $sql = "INSERT INTO `users` (`id`, `name`, `login`, `email`, `password`, `date_created`) VALUES (null, :name, :login, :email, :password, NOW())";
-            $statement = $db->prepare($sql);
-            $statement->execute(['name' => $name, 'login' => $login, 'email' => $email, 'password' => $passwordHash]);
-
-            Roles::addRoles($db, $email);
+            DbRequests::signUpDB($name, $login, $email, $passwordHash);
+            DbRequests::addRolesDB($email);
 
             http_response_code(200);
             echo json_encode(array("message" => "User created"));

@@ -2,6 +2,8 @@
 
 namespace app\Services;
 
+use app\Database\Database;
+
 class ValidationData
 {
     /**
@@ -34,12 +36,12 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
      * @param string $id
      * @return bool
      */
-    public static function checkUser(\PDO $db, string $id): bool
+    public static function checkUser(string $id): bool
     {
+        $db = Database::connect();
         $sql = "SELECT `id` FROM `users` WHERE `id` = :id";
         $statement = $db->prepare($sql);
         $statement->execute(['id' => $id]);
@@ -52,12 +54,12 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
      * @param string $email
      * @return bool
      */
-    public static function checkEmailExistence(\PDO $db, string $email): bool
+    public static function checkEmailExistence(string $email): bool
     {
+        $db = Database::connect();
         $sql = "SELECT * FROM `users` WHERE `email` = :email";
         $statement = $db->prepare($sql);
         $statement->execute(['email' => $email]);
@@ -69,14 +71,14 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
      * @param string $userFile
      * @param string $id
      * @param string $dirId
      * @return bool
      */
-    public static function checkFileExistence(\PDO $db, string $userFile, string $id, string $dirId): bool
+    public static function checkFileExistence(string $userFile, string $id, string $dirId): bool
     {
+        $db = Database::connect();
         $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = '$id' AND `directory_id` = :directory_id";
         $statement = $db->prepare($sql);
         $statement->execute(['user_file' => $userFile, 'directory_id' => $dirId]);
@@ -89,13 +91,13 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
      * @param string $folder
      * @param string $id
      * @return bool
      */
-    public static function checkFolderExistence(\PDO $db, string $folder, string $id): bool
+    public static function checkFolderExistence(string $folder, string $id): bool
     {
+        $db = Database::connect();
         $sql = "SELECT `name`, `id` FROM `folders` WHERE `name` = :folder AND `user_id` = :id";
         $statement = $db->prepare($sql);
         $statement->execute(['folder' => $folder, 'id' => $id]);
