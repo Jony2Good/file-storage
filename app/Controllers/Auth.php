@@ -3,8 +3,8 @@
 namespace app\Controllers;
 
 use app\Database\Database;
-use app\Database\DbRequests;
-use app\Services\CheckTokens;
+use app\Database\Model\AuthDbRequests;
+use app\Services\Tokens;
 use app\Services\GeneratePass;
 use app\Services\SendMailPassword;
 use app\Services\ValidationData;
@@ -29,7 +29,7 @@ class Auth
         $password = $data['password'] ?? "";
         $pasConfirm = $data['password_confirm'] ?? "";
 
-        if (!ValidationData::filterNameData($name) || !ValidationData::filterNameData($login) || !ValidationData::filterEmailData($email)) {
+        if (!ValidationData::checkNameData($name) || !ValidationData::checkNameData($login) || !ValidationData::checkEmailData($email)) {
             http_response_code(400);
             echo json_encode(array("error" => "Entering personal information incorrect"));
             die();
@@ -42,8 +42,8 @@ class Auth
         if ($password === $pasConfirm) {
             $passwordHash = password_hash($data["password"], PASSWORD_BCRYPT);
 
-            DbRequests::signUpDB($name, $login, $email, $passwordHash);
-            DbRequests::addRolesDB($email);
+            AuthDbRequests::signUpDB($name, $login, $email, $passwordHash);
+            AuthDbRequests::addRolesDB($email);
 
             http_response_code(200);
             echo json_encode(array("message" => "User created"));
@@ -60,14 +60,9 @@ class Auth
 
     public function login(array $data): void
     {
-        $db = Database::connect();
         $email = $data['email'] ?? "";
         $password = $data['password'] ?? "";
-
-        $sql = "SELECT * FROM `users` WHERE `email` = :email";
-        $statement = $db->prepare($sql);
-        $statement->execute(['email' => $email]);
-        $users = $statement->fetch();
+        $users = AuthDbRequests::loginDbRequest($email);
         if (empty($users)) {
             http_response_code(401);
             echo json_encode(array("error" => "User with email {$email} is not registered"));
@@ -81,13 +76,13 @@ class Auth
                 die();
             } else {
                 session_start();
-                $token = GeneratePass::createToken();
+                $token = Tokens::createRandomToken();
                 $_SESSION['user_data'] = [
                     'sid' => $token,
                     'userId' => $userId,
                     'email' => $email
                 ];
-                CheckTokens::createTokenDB($db, $_SESSION['user_data']['sid'], $userId);
+                Tokens::createTokenDB($_SESSION['user_data']['sid'], $userId);
                 http_response_code(200);
                 echo json_encode(array(
                     "user_email" => $email,
@@ -104,10 +99,11 @@ class Auth
     public function logout(): void
     {
         session_start();
-        $db = Database::connect();
         $sid = $_SESSION['user_data']['sid'] ?? '';
         $userId = $_SESSION['user_data']['userId'] ?? '';
-        $db->query("DELETE FROM `tokens` WHERE user_id = '$userId' AND token = '$sid'");
+
+        AuthDbRequests::logoutDbRequest($userId, $sid);
+
         session_destroy();
         foreach ($_SESSION as $key => $value) {
             unset($_SESSION[$key]);
@@ -121,17 +117,13 @@ class Auth
      */
     public function resetPassword(): void
     {
-        $db = Database::connect();
         $email = $_GET['email'] ?? '';
-        if (!ValidationData::filterEmailData($email)) {
+        if (!ValidationData::checkEmailData($email)) {
             http_response_code(400);
             echo json_encode(array("error" => "Entering personal information incorrect"));
             die();
         } else {
-            $sql = "SELECT `password` FROM `users` WHERE `email` = :email";
-            $statement = $db->prepare($sql);
-            $statement->execute(['email' => $email]);
-            $data = $statement->fetch(\PDO::FETCH_ASSOC);
+            $data = AuthDbRequests::resetPassDbRequest($email);
             if (!$data) {
                 http_response_code(404);
                 echo json_encode(array("message" => "User not found"));
@@ -139,10 +131,10 @@ class Auth
             } else {
                 session_start();
                 $_SESSION['reset_email'] = $email;
-                $token = GeneratePass::createToken();
+                $token = Tokens::createRandomToken();
                 $tempPass = $_SESSION['temporary_pass'] = GeneratePass::createPassword();
 
-                CheckTokens::checkTemporaryPassword($db, $email, $token, $tempPass);
+                ValidationData::checkTemporaryPassword($email, $token, $tempPass);
 
                 $mail = new SendMailPassword();
                 $mail->sendMail($email);
@@ -161,35 +153,27 @@ class Auth
     public function changePassword(array $post): void
     {
         session_start();
-        $db = Database::connect();
         $email = $_SESSION['reset_email'] ?? '';
         $temporaryPas = $_SESSION['temporary_pass'] ?? '';
         $cookiesToken = $_COOKIE['reset_pas'] ?? '';
-
         if (empty($cookiesToken)) {
             http_response_code(401);
             echo json_encode(array("message" => "You do not have access to this page"));
             die();
         }
         if (!empty($email) && !empty($temporaryPas)) {
-            $sql = "SELECT `email`, `cookies_token`, `temporary_pass`  FROM `reset_pas` WHERE `email` = :email AND `cookies_token` = :cookiesToken AND `temporary_pass` = '$temporaryPas'";
-            $statement = $db->prepare($sql);
-            $statement->execute(['email' => $email, 'cookiesToken' => $cookiesToken]);
-            $data = $statement->fetch(\PDO::FETCH_ASSOC);
+            $data = AuthDbRequests::getPassDbRequest($email, $cookiesToken);
             if (isset($data['email']) && isset($data['cookies_token']) && isset($data['temporary_pass'])) {
                 $newPass = $post['password'] ?? '';
                 $newPassConfirm = $post['password_confirm'] ?? '';
                 $userEmail = $data['email'];
                 $userPas = $data['temporary_pass'];
                 $userCookies = $data['cookies_token'];
-
                 if ($newPass === $newPassConfirm) {
                     $passwordHash = password_hash($newPass, PASSWORD_BCRYPT);
 
-                    $statement = $db->prepare("UPDATE `users` SET `password` = '$passwordHash' WHERE `email` = :email");
-                    $statement->execute(['email' => $userEmail]);
-
-                    $db->query("DELETE FROM `reset_pas` WHERE `email` = '$userEmail' AND `cookies_token` = '$userCookies' AND `temporary_pass` = '$userPas'");
+                    AuthDbRequests::changePasDbRequest($passwordHash, $userEmail);
+                    AuthDbRequests::deletePassDbRequest($userEmail, $userCookies, $userPas);
 
                     unset($_COOKIE['reset_pas']);
                     setcookie('reset_pas', "", -1, '/');

@@ -2,6 +2,7 @@
 
 namespace app\Database;
 
+use JetBrains\PhpStorm\NoReturn;
 use function config\configDb;
 use function config\dbOptions;
 
@@ -10,7 +11,7 @@ class Database
     /**
      * @var object|null
      */
-    private static ?object $instance = null;
+    private static object|null $instance = null;
 
     private function __construct()
     {
@@ -19,9 +20,9 @@ class Database
     /**
      * @return object|null
      */
-    public static function connect(): ?object
+    public static function getInstance(): null|object
     {
-        if (is_null(static::$instance)) {
+        if (is_null(self::$instance)) {
             try {
                 $config = configDb();
                 $options = dbOptions();
@@ -32,5 +33,15 @@ class Database
             }
         }
         return static::$instance;
+    }
+
+    #[NoReturn] private function __clone(): void
+    {
+        \trigger_error("Unable to implement instruction", E_USER_ERROR);
+    }
+
+    #[NoReturn] public function __wakeup(): void
+    {
+        \trigger_error("Unable to implement instruction", E_USER_ERROR);
     }
 }

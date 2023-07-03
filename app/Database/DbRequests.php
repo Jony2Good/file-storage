@@ -5,72 +5,53 @@ namespace app\Database;
 use app\Database\Database;
 use app\Services\Roles;
 
-class DbRequests
+class DbRequests extends Database implements Requests
 {
+
+    public static function dbConnect(): ?object
+    {
+        return Database::getInstance();
+    }
+
     /**
-     * @param string $query
+     * @param string $statement
      * @param array<string> $data
      * @return bool
      */
-    private static function write(string $query, array $data): bool
+    public static function write(string $statement, array $data): bool
     {
-        $db = Database::connect();
-        $statement = $db->prepare($query);
+        $db = self::dbConnect();
+        $statement = $db->prepare($statement);
         return $statement->execute($data);
     }
 
     /**
-     * @param string $query
+     * @param string $statement
      * @param array<string> $data
+     * @param string $mode
      * @return array
      */
-    private static function read(string $query, array $data):array
+    public static function read(string $statement, array $data, string $mode)
     {
-        $db = Database::connect();
-        $statement = $db->prepare($query);
+        $db = self::dbConnect();
+        $statement = $db->prepare($statement);
         $statement->execute($data);
-        return $statement->fetch(\PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * @param string $query
-     * @return void
-     */
-    private static function query(string $query): void
-    {
-        Database::connect()->query($query);
-    }
-
-    /**
-     * @param string $name
-     * @param string $login
-     * @param string $email
-     * @param string $passwordHash
-     * @return void
-     */
-    public static function signUpDB(string $name, string $login, string $email, string $passwordHash): void
-    {
-        $sql = "INSERT INTO `users` (`id`, `name`, `login`, `email`, `password`, `date_created`) VALUES (null, :name, :login, :email, :password, NOW())";
-        $data = ['name' => $name, 'login' => $login, 'email' => $email, 'password' => $passwordHash];
-        self::write($sql, $data);
-    }
-
-    /**
-     * @param string $email
-     * @param bool $admin
-     * @return void
-     */
-    public static function addRolesDB(string $email, bool $admin = false): void
-    {
-        $query = "SELECT `id` FROM `users` WHERE `email` = :email";
-        $data = ['email' => $email];
-        $userId = self::read($query, $data);
-        $id = $userId['id'];
-        if ($admin) {
-            $req = "INSERT INTO `users_roles` (`user_id`, `roles_id`) VALUE ('$id', '1')";
-        } else {
-            $req = "INSERT INTO `users_roles` (`user_id`, `roles_id`) VALUE ('$id', '2')";
+        switch ($mode) {
+            case 1:
+                return $statement->fetch(\PDO::FETCH_ASSOC);
+            case 2:
+                return $statement->fetchAll(\PDO::FETCH_ASSOC);
+            case 3:
+                return $statement->fetchColumn();
         }
-        self::query($req);
+    }
+
+    /**
+     * @param string $statement
+     * @return void
+     */
+    public static function query(string $statement): void
+    {
+        self::dbConnect()->query($statement);
     }
 }

@@ -3,14 +3,15 @@
 namespace app\Services;
 
 use app\Database\Database;
+use app\Database\DbRequests;
 
-class ValidationData
+class ValidationData extends DbRequests
 {
     /**
      * @param string $data
      * @return bool
      */
-    public static function filterNameData(string $data): bool
+    public static function checkNameData(string $data): bool
     {
         $data = trim($data);
         $data = stripslashes($data);
@@ -25,7 +26,7 @@ class ValidationData
      * @param string $data
      * @return bool
      */
-    public static function filterEmailData(string $data): bool
+    public static function checkEmailData(string $data): bool
     {
         $data = filter_var(trim($data), FILTER_SANITIZE_EMAIL);
         if (filter_var($data, FILTER_VALIDATE_EMAIL)) {
@@ -41,11 +42,9 @@ class ValidationData
      */
     public static function checkUser(string $id): bool
     {
-        $db = Database::connect();
         $sql = "SELECT `id` FROM `users` WHERE `id` = :id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['id' => $id]);
-        $row = $statement->fetchColumn();
+        $data = ['id' => $id];
+        $row = DbRequests::read($sql, $data, 1);
         if (!$row) {
             return false;
         } else {
@@ -59,15 +58,34 @@ class ValidationData
      */
     public static function checkEmailExistence(string $email): bool
     {
-        $db = Database::connect();
+
         $sql = "SELECT * FROM `users` WHERE `email` = :email";
-        $statement = $db->prepare($sql);
-        $statement->execute(['email' => $email]);
-        $response = $statement->fetchColumn();
+        $data = ['email' => $email];
+        $response = DbRequests::read($sql, $data, 3);
         if ($response > 1) {
             return false;
         }
         return true;
+    }
+
+    /**
+     * @param \PDO $db
+     * @param string $email
+     * @param string $token
+     * @param string $tempPass
+     * @return void
+     */
+    public static function checkTemporaryPassword(string $email, string $token, string $tempPass): void
+    {
+        $sql = "SELECT `id` FROM `reset_pas` WHERE `email` = :email";
+        $data = ['email' => $email];
+        $response = self::read($sql, $data, 3);
+        if ($response > 1) {
+            $stm = "UPDATE `reset_pas` SET `cookies_token` = '$token', `temporary_pass` = '$tempPass' WHERE `email` = '$email'";
+        } else {
+            $stm = "INSERT INTO `reset_pas` (`id`, `email`, `cookies_token`,`temporary_pass`) VALUES (null, '$email', '$token', '$tempPass')";
+        }
+        self::query($stm);
     }
 
     /**
@@ -78,11 +96,9 @@ class ValidationData
      */
     public static function checkFileExistence(string $userFile, string $id, string $dirId): bool
     {
-        $db = Database::connect();
         $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = '$id' AND `directory_id` = :directory_id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['user_file' => $userFile, 'directory_id' => $dirId]);
-        $row = $statement->fetchColumn();
+        $data = ['user_file' => $userFile, 'directory_id' => $dirId];
+        $row = self::read($sql, $data, 3);
         if ($row > 1) {
             return false;
         } else {
