@@ -41,9 +41,9 @@ class AuthDbRequests extends DbRequests
 
     /**
      * @param string $email
-     * @return array|null
+     * @return array|bool
      */
-    public static function loginDbRequest(string $email): ?array
+    public static function loginDbRequest(string $email): array|bool
     {
         $sql = "SELECT * FROM `users` WHERE `email` = :email";
         $data = ['email' => $email];
@@ -63,9 +63,9 @@ class AuthDbRequests extends DbRequests
 
     /**
      * @param string $email
-     * @return array|null
+     * @return array|bool
      */
-    public static function resetPassDbRequest(string $email): ?array
+    public static function resetPassDbRequest(string $email): array|bool
     {
         $sql = "SELECT `password` FROM `users` WHERE `email` = :email";
         $data = ['email' => $email];
@@ -75,9 +75,9 @@ class AuthDbRequests extends DbRequests
     /**
      * @param string $email
      * @param string $token
-     * @return array|null
+     * @return array|bool
      */
-    public static function getPassDbRequest(string $email, string $token): ?array
+    public static function getPassDbRequest(string $email, string $token, string $temporaryPas): array|bool
     {
         $sql = "SELECT `email`, `cookies_token`, `temporary_pass`  FROM `reset_pas` WHERE `email` = :email AND `cookies_token` = :cookiesToken AND `temporary_pass` = '$temporaryPas'";
         $data = ['email' => $email, 'cookiesToken' => $token];
@@ -107,6 +107,4 @@ class AuthDbRequests extends DbRequests
         $sql = "DELETE FROM `reset_pas` WHERE `email` = '$userEmail' AND `cookies_token` = '$userCookies' AND `temporary_pass` = '$userPas'";
         self::query($sql);
     }
-
-
 }

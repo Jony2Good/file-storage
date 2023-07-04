@@ -58,7 +58,6 @@ class ValidationData extends DbRequests
      */
     public static function checkEmailExistence(string $email): bool
     {
-
         $sql = "SELECT * FROM `users` WHERE `email` = :email";
         $data = ['email' => $email];
         $response = DbRequests::read($sql, $data, 3);
@@ -69,7 +68,6 @@ class ValidationData extends DbRequests
     }
 
     /**
-     * @param \PDO $db
      * @param string $email
      * @param string $token
      * @param string $tempPass
@@ -86,6 +84,18 @@ class ValidationData extends DbRequests
             $stm = "INSERT INTO `reset_pas` (`id`, `email`, `cookies_token`,`temporary_pass`) VALUES (null, '$email', '$token', '$tempPass')";
         }
         self::query($stm);
+    }
+
+    public static function checkRoles(string $userId): bool
+    {
+        $sql = "SELECT u.id, r.group_name FROM `users` u INNER JOIN users_roles ur ON u.id = ur.user_id INNER JOIN roles r ON ur.roles_id = r.id WHERE u.id = :user_id AND r.group_name = 'admin'";
+        $data = ['user_id' => $userId];
+        $statement = self::read($sql, $data, 1);
+        if (!$statement) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     /**

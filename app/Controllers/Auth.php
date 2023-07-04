@@ -2,7 +2,6 @@
 
 namespace app\Controllers;
 
-use app\Database\Database;
 use app\Database\Model\AuthDbRequests;
 use app\Services\Tokens;
 use app\Services\GeneratePass;
@@ -18,11 +17,6 @@ class Auth
      */
     public function signUp(array $data): void
     {
-        if (empty($data)) {
-            http_response_code(400);
-            echo json_encode(array("error" => "Bad request"));
-            die();
-        }
         $name = $data["name"] ?? "";
         $login = $data["login"] ?? "";
         $email = $data["email"] ?? "";
@@ -162,7 +156,7 @@ class Auth
             die();
         }
         if (!empty($email) && !empty($temporaryPas)) {
-            $data = AuthDbRequests::getPassDbRequest($email, $cookiesToken);
+            $data = AuthDbRequests::getPassDbRequest($email, $cookiesToken, $temporaryPas);
             if (isset($data['email']) && isset($data['cookies_token']) && isset($data['temporary_pass'])) {
                 $newPass = $post['password'] ?? '';
                 $newPassConfirm = $post['password_confirm'] ?? '';
@@ -180,6 +174,7 @@ class Auth
                 } else {
                     http_response_code(401);
                     echo json_encode(array("message" => "Password mismatch"));
+                    die();
                 }
             }
             http_response_code(200);

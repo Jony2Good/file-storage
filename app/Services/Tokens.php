@@ -14,6 +14,7 @@ class Tokens extends DbRequests
     {
         return bin2hex(openssl_random_pseudo_bytes($length));
     }
+
     /**
      * @param string $token
      * @param string $userId
@@ -33,24 +34,20 @@ class Tokens extends DbRequests
     }
 
     /**
-     * @param \PDO $db
      * @param string $token
-     * @return false|mixed
+     * @return bool
      */
-    public static function verifyUserToken(\PDO $db, string $token)
+    public static function verifyUserToken(string $token): bool
     {
         if (!empty($token)) {
             $sql = "SELECT `token`, `user_id` FROM `tokens` WHERE `token` = :token";
-            $statement = $db->prepare($sql);
-            $statement->bindParam(':token', $token);
-            $statement->execute();
-            $tokenDB = $statement->fetch(\PDO::FETCH_ASSOC);
-            return $tokenDB['token'];
-        } else {
-            http_response_code(401);
-            echo json_encode(array("message" => "You are not authorized to visit this page"));
-            return false;
+            $data = ['token' => $token];
+            $statement = self::read($sql, $data, 1);
+            if ($statement) {
+                return true;
+            }
         }
+        return false;
     }
 
 

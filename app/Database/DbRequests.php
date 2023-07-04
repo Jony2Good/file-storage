@@ -27,11 +27,11 @@ class DbRequests extends Database implements Requests
 
     /**
      * @param string $statement
-     * @param array<string> $data
+     * @param array|null $data
      * @param string $mode
      * @return array
      */
-    public static function read(string $statement, array $data, string $mode)
+    public static function read(string $statement, ?array $data, string $mode): mixed
     {
         $db = self::dbConnect();
         $statement = $db->prepare($statement);
@@ -43,6 +43,8 @@ class DbRequests extends Database implements Requests
                 return $statement->fetchAll(\PDO::FETCH_ASSOC);
             case 3:
                 return $statement->fetchColumn();
+            default:
+                return false;
         }
     }
 
