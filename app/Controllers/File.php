@@ -4,22 +4,32 @@ namespace app\Controllers;
 
 use app\Database\Database;
 use app\Services\CheckTokens;
+use app\Services\CreateSession;
+use app\Services\Interface\SessionService;
 use app\Services\Roles;
 use app\Services\ValidationData;
 
 class File
 {
     /**
+     * @return  SessionService
+     */
+    private static function startSessionUser(): SessionService
+    {
+        return new CreateSession();
+    }
+    /**
      * @param array<string> $data
      * @return void
      */
     public function createDirectory(array $data): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
+        $sessionData = self::startSessionUser()->start();
+        $id = $sessionData['userId'] ?? '';
+        $token = $sessionData['sid'] ?? '';
         $directoryName = $data['directory'] ?? '';
+
+
         if (!ValidationData::filterNameData($directoryName)) {
             http_response_code(400);
             echo json_encode(array("message" => "Error with entry information"));

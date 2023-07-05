@@ -1,6 +1,6 @@
 <?php
 
-namespace app\Database;
+namespace app\Database\Interface;
 
 interface Requests
 {

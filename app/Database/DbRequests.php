@@ -2,8 +2,7 @@
 
 namespace app\Database;
 
-use app\Database\Database;
-use app\Services\Roles;
+use app\Database\Interface\Requests;
 
 class DbRequests extends Database implements Requests
 {

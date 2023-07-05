@@ -3,26 +3,36 @@
 namespace app\Controllers;
 
 use app\Database\Model\UserDbRequest;
+use app\Services\CreateSession;
+use app\Services\Interface\SessionService;
 use app\Services\Tokens;
 use app\Services\ValidationData;
 
 class User
 {
+    private string $token;
+    private string $userId;
+
     /**
-     * @return array|string
+     * @return  SessionService
      */
-    private static function startSessionUser(): array|string
+    private static function startSessionUser(): SessionService
     {
-        session_start();
-        return $_SESSION['user_data'] ?? "";
+        return new CreateSession();
     }
+
+    private function setData(): void
+    {
+        $data = self::startSessionUser()->start();
+        $this->token = $data['token'];
+        $this->userId = $data['id'];
+    }
+
 
     public function showUserList(): void
     {
-        $data = self::startSessionUser();
-        $token = $data['sid'] ?? '';
-        $userId = $data['userId'] ?? '';
-        if (ValidationData::checkRoles($userId) && Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
             $response = UserDbRequest::showUsersDbRequest();
             http_response_code(200);
             echo json_encode($response);
@@ -38,10 +48,8 @@ class User
      */
     public function getUser(string $id): void
     {
-        $data = self::startSessionUser();
-        $userId = $data['userId'] ?? '';
-        $token = $data['sid'] ?? '';
-        if (ValidationData::checkRoles($userId) && Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
             $user = UserDbRequest::getUserDbRequest($id);
             if (!$user) {
                 http_response_code(400);
@@ -62,10 +70,8 @@ class User
      */
     public function deleteUser(string $id): void
     {
-        $data = self::startSessionUser();
-        $userId = $data['userId'] ?? '';
-        $token = $data['sid'] ?? '';
-        if (ValidationData::checkRoles($userId) && Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
             if (!ValidationData::checkUser($id)) {
                 http_response_code(400);
                 echo json_encode(array("error" => "User not found"));
@@ -87,10 +93,8 @@ class User
      */
     public function updateUser(): void
     {
-        $data = self::startSessionUser();
-        $userId = $data['userId'] ?? '';
-        $token = $data['sid'] ?? '';
-        if (ValidationData::checkRoles($userId) && Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
             $json = file_get_contents('php://input');
             if (!$json) {
                 http_response_code(401);
@@ -126,9 +130,8 @@ class User
      */
     public function searchUser(string $email): void
     {
-        $data = self::startSessionUser();
-        $token = $data['sid'] ?? '';
-        if (Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
             $user = UserDbRequest::searchUserDbRequest($email);
             if (!$user) {
                 http_response_code(400);
@@ -146,9 +149,8 @@ class User
 
     public function showUsers(): void
     {
-        $data = self::startSessionUser();
-        $token = $data['sid'] ?? '';
-        if (Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
             $response = UserDbRequest::showUsersDbRequest();
             http_response_code(200);
             echo json_encode($response);
@@ -164,10 +166,8 @@ class User
      */
     public function showOneUser(string $id): void
     {
-        $data = self::startSessionUser();
-        $userId = $data['userId'] ?? '';
-        $token = $data['sid'] ?? '';
-        if ((Tokens::verifyUserToken($token)) && ((int)$id === $userId)) {
+        $this->setData();
+        if ((Tokens::verifyUserToken($this->token)) && ($id === $this->userId)) {
             $user = UserDbRequest::showUserDbRequest($id);
             if (!$user) {
                 http_response_code(400);
@@ -188,10 +188,8 @@ class User
      */
     public function changeUserData(): void
     {
-        $data = self::startSessionUser();
-        $token = $data['sid'] ?? '';
-        $userId = $data['userId'] ?? '';
-        if (Tokens::verifyUserToken($token)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
             $json = file_get_contents('php://input');
             if (!$json) {
                 http_response_code(401);
@@ -206,7 +204,7 @@ class User
             $name = $obj['name'] ?? '';
             $login = $obj['login'] ?? '';
             $email = $obj['email'] ?? '';
-            if ((int)$id !== $userId) {
+            if ((int)$id != $this->userId) {
                 http_response_code(401);
                 echo json_encode(array("error" => "Cancel operation. Data error"));
                 die();
@@ -226,11 +224,9 @@ class User
      */
     public function deleteOneUser(string $id): void
     {
-        $data = self::startSessionUser();
-        $userId = $data['userId'] ?? '';
-        $token = $data['sid'] ?? '';
-        if (Tokens::verifyUserToken($token)) {
-            if ((int)$id !== $userId) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            if ($id !== $this->userId) {
                 http_response_code(401);
                 echo json_encode(array("error" => "Cancel operation. Data error"));
                 die();
