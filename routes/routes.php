@@ -27,10 +27,10 @@ Router::put('/directory', File::class, 'renameDirectory');
 Router::delete('/directory/{id}', File::class, 'deleteDirectory');
 
 Router::post('/file', File::class, 'createFile', true, true);
-Router::get('/file', File::class, 'getFiles');
+Router::get('/files', File::class, 'getFiles');
 Router::get('/file/{id}', File::class, 'getCurrentFile', true);
 Router::delete('/file/{id}', File::class, 'deleteFile');
-Router::put('/file', File::class, 'changeFile');
+Router::put('/file', File::class, 'renameFile');
 
 Router::get('/user/search/{$id}', User::class, 'searchUser', true);
 

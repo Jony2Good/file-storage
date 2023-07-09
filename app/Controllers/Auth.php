@@ -2,7 +2,7 @@
 
 namespace app\Controllers;
 
-use app\Database\Model\AuthDbRequests;
+use app\Database\Model\AuthDbRequest;
 use app\Services\Tokens;
 use app\Services\GeneratePass;
 use app\Services\SendMailPassword;
@@ -36,8 +36,8 @@ class Auth
         if ($password === $pasConfirm) {
             $passwordHash = password_hash($data["password"], PASSWORD_BCRYPT);
 
-            AuthDbRequests::signUpDB($name, $login, $email, $passwordHash);
-            AuthDbRequests::addRolesDB($email);
+            AuthDbRequest::signUpDB($name, $login, $email, $passwordHash);
+            AuthDbRequest::addRolesDB($email);
 
             http_response_code(200);
             echo json_encode(array("message" => "User created"));
@@ -56,7 +56,7 @@ class Auth
     {
         $email = $data['email'] ?? "";
         $password = $data['password'] ?? "";
-        $users = AuthDbRequests::loginDbRequest($email);
+        $users = AuthDbRequest::loginDbRequest($email);
         if (empty($users)) {
             http_response_code(401);
             echo json_encode(array("error" => "User with email {$email} is not registered"));
@@ -96,7 +96,7 @@ class Auth
         $sid = $_SESSION['user_data']['sid'] ?? '';
         $userId = $_SESSION['user_data']['userId'] ?? '';
 
-        AuthDbRequests::logoutDbRequest($userId, $sid);
+        AuthDbRequest::logoutDbRequest($userId, $sid);
 
         session_destroy();
         foreach ($_SESSION as $key => $value) {
@@ -117,7 +117,7 @@ class Auth
             echo json_encode(array("error" => "Entering personal information incorrect"));
             die();
         } else {
-            $data = AuthDbRequests::resetPassDbRequest($email);
+            $data = AuthDbRequest::resetPassDbRequest($email);
             if (!$data) {
                 http_response_code(404);
                 echo json_encode(array("message" => "User not found"));
@@ -156,7 +156,7 @@ class Auth
             die();
         }
         if (!empty($email) && !empty($temporaryPas)) {
-            $data = AuthDbRequests::getPassDbRequest($email, $cookiesToken, $temporaryPas);
+            $data = AuthDbRequest::getPassDbRequest($email, $cookiesToken, $temporaryPas);
             if (isset($data['email']) && isset($data['cookies_token']) && isset($data['temporary_pass'])) {
                 $newPass = $post['password'] ?? '';
                 $newPassConfirm = $post['password_confirm'] ?? '';
@@ -166,8 +166,8 @@ class Auth
                 if ($newPass === $newPassConfirm) {
                     $passwordHash = password_hash($newPass, PASSWORD_BCRYPT);
 
-                    AuthDbRequests::changePasDbRequest($passwordHash, $userEmail);
-                    AuthDbRequests::deletePassDbRequest($userEmail, $userCookies, $userPas);
+                    AuthDbRequest::changePasDbRequest($passwordHash, $userEmail);
+                    AuthDbRequest::deletePassDbRequest($userEmail, $userCookies, $userPas);
 
                     unset($_COOKIE['reset_pas']);
                     setcookie('reset_pas', "", -1, '/');

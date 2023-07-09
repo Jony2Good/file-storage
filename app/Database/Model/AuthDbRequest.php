@@ -4,7 +4,7 @@ namespace app\Database\Model;
 
 use app\Database\DbRequests;
 
-class AuthDbRequests extends DbRequests
+class AuthDbRequest extends DbRequests
 {
     /**
      * @param string $name

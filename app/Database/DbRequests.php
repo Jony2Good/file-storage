@@ -6,7 +6,10 @@ use app\Database\Interface\Requests;
 
 class DbRequests extends Database implements Requests
 {
-
+    protected const FETCH = 1;
+    protected const FETCH_All = 2;
+    protected const FETCH_COLUMN = 3;
+    protected const FETCH_GROUP = 4;
     public static function dbConnect(): ?object
     {
         return Database::getInstance();
@@ -42,6 +45,8 @@ class DbRequests extends Database implements Requests
                 return $statement->fetchAll(\PDO::FETCH_ASSOC);
             case 3:
                 return $statement->fetchColumn();
+            case 4:
+                return $statement->fetchAll(\PDO::FETCH_COLUMN | \PDO::FETCH_GROUP);
             default:
                 return false;
         }

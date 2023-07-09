@@ -100,14 +100,14 @@ class ValidationData extends DbRequests
 
     /**
      * @param string $userFile
-     * @param string $id
-     * @param string $dirId
+     * @param string $userId
+     * @param int $dirId
      * @return bool
      */
-    public static function checkFileExistence(string $userFile, string $id, string $dirId): bool
+    public static function checkFileExistence(string $userFile, string $userId, int $dirId): bool
     {
-        $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = '$id' AND `directory_id` = :directory_id";
-        $data = ['user_file' => $userFile, 'directory_id' => $dirId];
+        $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = :user_id AND `directory_id` = :directory_id";
+        $data = ['user_file' => $userFile, 'user_id' => $userId, 'directory_id' => $dirId];
         $row = self::read($sql, $data, 3);
         if ($row > 1) {
             return false;
@@ -117,17 +117,16 @@ class ValidationData extends DbRequests
     }
 
     /**
-     * @param string $folder
-     * @param string $id
+     * @param string $dirName
+     * @param string $userId
      * @return bool
      */
-    public static function checkFolderExistence(string $folder, string $id): bool
+    public static function checkFolderExistence(string $dirName, string $userId): bool
     {
-        $db = Database::connect();
-        $sql = "SELECT `name`, `id` FROM `folders` WHERE `name` = :folder AND `user_id` = :id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['folder' => $folder, 'id' => $id]);
-        $response = $statement->fetchAll(\PDO::FETCH_ASSOC);
+        $sql = "SELECT `name`, `id` FROM `folders` WHERE `name` = :dirName AND `user_id` = :userId";
+        $data = ['dirName' => $dirName, 'userId' => $userId];
+        $response = self::read($sql, $data, 2);
+
         if (empty($response)) {
             return false;
         }

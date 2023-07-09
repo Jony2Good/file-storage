@@ -3,14 +3,25 @@
 namespace app\Controllers;
 
 use app\Database\Database;
-use app\Services\CheckTokens;
+use app\Database\Model\DirectoryDbRequest;
+use app\Database\Model\FileDBRequest;
+use app\Services\Tokens;
 use app\Services\CreateSession;
 use app\Services\Interface\SessionService;
 use app\Services\Roles;
 use app\Services\ValidationData;
 
-class File
+class File extends DirectoryDbRequest
 {
+    private string $token;
+    private string $userId;
+
+    private string $parentDir;
+
+    public function __construct()
+    {
+    }
+
     /**
      * @return  SessionService
      */
@@ -18,115 +29,79 @@ class File
     {
         return new CreateSession();
     }
+
+    private function setData(): void
+    {
+        $data = self::startSessionUser()->start();
+        $this->token = $data['token'];
+        $this->userId = $data['id'];
+        $this->parentDir = $_SERVER['DOCUMENT_ROOT'] . '/uploads/';
+    }
+
     /**
      * @param array<string> $data
      * @return void
      */
     public function createDirectory(array $data): void
     {
-        $sessionData = self::startSessionUser()->start();
-        $id = $sessionData['userId'] ?? '';
-        $token = $sessionData['sid'] ?? '';
+        $this->setData();
         $directoryName = $data['directory'] ?? '';
-
-
-        if (!ValidationData::filterNameData($directoryName)) {
+        if (!ValidationData::checkNameData($directoryName)) {
             http_response_code(400);
-            echo json_encode(array("message" => "Error with entry information"));
+            echo json_encode(array("error" => "Wrong entry information"));
             die();
         }
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("message" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            $sql = "SELECT `name` FROM `folders` WHERE `name` = :name AND `user_id` = '$id'";
-            $statement = $db->prepare($sql);
-            $statement->execute(['name' => $directoryName]);
-            $response = $statement->fetchColumn();
-            if ($response || $response > 1) {
+        if (Tokens::verifyUserToken($this->token)) {
+            if (ValidationData::checkFolderExistence($directoryName, $this->userId)) {
                 http_response_code(400);
-                echo json_encode(array("message" => "Error! Folder '{$directoryName}' is already exist"));
+                echo json_encode(array("error" => "Directory '{$directoryName}' is already exist"));
                 die();
             } else {
-                $parentDir = $_SERVER['DOCUMENT_ROOT'] . '/uploads/';
-                $contentPath = $parentDir . $directoryName;
-
-                $sql = "INSERT INTO `folders` (`id`, `name`, `directory`,`user_id`) VALUES (null, :name, :directory, '$id')";
-                $statement = $db->prepare($sql);
-                $statement->execute(['name' => $directoryName, 'directory' => $contentPath]);
-
-                $res = $db->query("SELECT `id`, `user_id` FROM `folders` WHERE `user_id` = '$id' AND `directory` = '$contentPath'");
-                $row = $res->fetch(\PDO::FETCH_ASSOC);
+                $contentPath = $this->parentDir . $directoryName;
+                DirectoryDbRequest::createDir($this->userId, $directoryName, $contentPath);
                 http_response_code(200);
                 echo json_encode(array(
-                    "user_id" => $row['user_id'],
-                    "folder_id" => $row['id'],
-                    "name" => $directoryName,
+                    "dir_name" => $directoryName,
                     "status" => "created"
                 ));
             }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
     /**
-     * @param string $folderId
+     * @param string $dirId
      * @return void
      */
-    public function getDirectory(string $folderId): void
+    public function getDirectory(string $dirId): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("message" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            $sql = "SELECT `id`, `name` FROM `folders` WHERE `id` = :folderId";
-            $statement = $db->prepare($sql);
-            $statement->execute(['folderId' => $folderId]);
-            $response = $statement->fetch(\PDO::FETCH_ASSOC);
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = DirectoryDbRequest::getDir($dirId, $this->userId);
             if (!$response) {
                 http_response_code(400);
-                echo json_encode(array("message" => "Error! Folder with id: '{$folderId}' does not exist"));
+                echo json_encode(array("error" => "Directory with id: '{$dirId}' does not exist"));
                 die();
             } else {
-                $resName = $response['name'];
-                $sql = "SELECT fl.user_file_name as file_name FROM `folders` f INNER JOIN folders_files ffs ON f.id = ffs.folders_id AND f.name = '$resName' AND f.user_id = '$id' AND f.id = '$folderId' LEFT JOIN files fl ON ffs.files_id = fl.id AND fl.user_id = '$id'";
-                $statement = $db->prepare($sql);
-                $statement->execute();
-                $response = $statement->fetchAll(\PDO::FETCH_ASSOC);
-                if (empty($response)) {
-                    exit(json_encode(array("message" => "Wrong id directory")));
-                }
                 http_response_code(200);
                 echo json_encode(array(
-                    "user_id" => $id,
-                    "directory_id" => $folderId,
-                    "directory_name" => $resName,
-                    "files" => $response
+                    "user_id" => $this->userId,
+                    "directory_id" => $dirId,
+                    "data" => $response
                 ));
             }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
     public function renameDirectory(): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("error" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
             $json = file_get_contents('php://input');
             if (!$json) {
                 http_response_code(401);
@@ -134,79 +109,72 @@ class File
                 die();
             }
             $obj = json_decode($json, true);
-            $folderId = $obj['id'] ?? '';
-            $newName = $obj['name'] ?? '';
-            $userId = $_SESSION['user_data']['userId'] ?? '';
-
-            $parentDir = $_SERVER['DOCUMENT_ROOT'] . '/uploads/';
-            $contentPath = $parentDir . $newName;
-
-            $sql = "UPDATE `folders` SET `name` = :newName, `directory` = :new_directory WHERE `id` = :folderId AND `user_id` = '$id'";
-            $statement = $db->prepare($sql);
-            $statement->execute(['newName' => $newName, 'new_directory' => $contentPath, 'folderId' => $folderId]);
-
-            http_response_code(200);
-            echo json_encode(
-                array(
-                    "user_id" => $userId,
-                    "directory_id" => $folderId,
-                    "directory_name" => $newName,
-                    "path" => $contentPath,
-                    "status" => "updated"
-                )
-            );
+            $dirId = $obj['directory_id'] ?? '';
+            $newName = $obj['directory_name'] ?? '';
+            $contentPath = $this->parentDir . $newName;
+            if (empty(DirectoryDbRequest::getDir($dirId, $this->userId))) {
+                http_response_code(400);
+                echo json_encode(array("error" => "Directory with id: '{$dirId}' does not exist"));
+                die();
+            } else {
+                if (!ValidationData::checkFolderExistence($newName, $this->userId)) {
+                    DirectoryDbRequest::updateDir($newName, $contentPath, $this->userId, $dirId);
+                    http_response_code(200);
+                    echo json_encode(
+                        array(
+                            "user_id" => $this->userId,
+                            "directory_id" => $dirId,
+                            "directory_name" => $newName,
+                            "path" => $contentPath,
+                            "status" => "updated"
+                        ));
+                } else {
+                    http_response_code(400);
+                    echo json_encode(array("error" => "Directory '{$newName}' is already exist"));
+                    die();
+                }
+            }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
     /**
-     * @param string $data
+     * @param string $dirId
      * @return void
      */
-    public function deleteDirectory(string $data): void
+    public function deleteDirectory(string $dirId): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("message" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            $sql = "SELECT f.name as directory, f.id, fs.name FROM `folders` f LEFT JOIN files fs ON f.id = fs.directory_id WHERE f.user_id = '$id' AND f.id = :data";
-            $statement = $db->prepare($sql);
-            $statement->execute(['data' => $data]);
-            $response = $statement->fetchAll(\PDO::FETCH_ASSOC);
-            if (empty($response)) {
-                http_response_code(401);
-                echo json_encode(
-                    array(
-                        "user_id" => $id,
-                        "error" => "directory_id: {$data} not exist"
-                    )
-                );
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = DirectoryDbRequest::getDir($dirId, $this->userId);
+            if (!$response) {
+                http_response_code(400);
+                echo json_encode(array("error" => "File with id: '{$dirId}' does not exist"));
                 die();
             } else {
-                $sql = "DELETE FROM `folders` WHERE `id` = :data";
-                $statement = $db->prepare($sql);
-                $statement->execute(['data' => $data]);
+                DirectoryDbRequest::deleteDir($dirId);
                 foreach ($response as $item) {
-                    $file = $_SERVER['DOCUMENT_ROOT'] . '/uploads/' . $item['name'];
-                    if (file_exists($file)) {
-                        unlink($file);
+                    if (isset($item['file_name'])) {
+                        $file = $_SERVER['DOCUMENT_ROOT'] . '/uploads/' . $item['file_name'];
+                        if (file_exists($file)) {
+                            unlink($file);
+                        }
                     }
                 }
                 http_response_code(200);
                 echo json_encode(
                     array(
-                        "user_id" => $id,
-                        "directory_id" => $data,
-                        "directory_name" => $response['0']['directory'],
+                        "user_id" => $this->userId,
+                        "directory_id" => $dirId,
                         "status" => "deleted"
                     )
                 );
             }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
@@ -217,19 +185,10 @@ class File
      */
     public function createFile(array $dataPost, array $dataFile): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        $fileDirectory = $dataPost['folder'] ?? '';
-
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("error" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            if (!ValidationData::checkFolderExistence($db, $fileDirectory, $id)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $dirName = $dataPost['folder'] ?? '';
+            if (!ValidationData::checkFolderExistence($dirName, $this->userId)) {
                 echo json_encode(array("error" => "Directory does not exists. Set file directory"));
                 die();
             }
@@ -240,180 +199,128 @@ class File
                 die();
             } else {
                 $fileTemp = $dataFile['file']['tmp_name'];
-                $path = $_SERVER['DOCUMENT_ROOT'] . '/uploads/';
-                $destPath = 'uploads/';
                 $newFileName = $file['newFileName'];
                 $userFileName = $file['oldFileName'];
-                $destFilePath = $destPath . $newFileName;
-                $dirId = self::getDirectoryId($db, $id, $fileDirectory);
+                $destFilePath = 'uploads/' . $newFileName;
 
-                if (!is_dir($path)) {
-                    mkdir($path);
+                $dirId = DirectoryDbRequest::getIdDir($dirName, $this->userId);
+
+                if (!is_dir($this->parentDir)) {
+                    mkdir($this->parentDir);
                 }
-                if (!ValidationData::checkFileExistence($db, $userFileName, $id, $dirId)) {
+                if (!ValidationData::checkFileExistence($userFileName, $this->userId, $dirId['id'])) {
                     echo json_encode(array("error" => "File exists. Rename file"));
                     die();
-                };
+                }
                 try {
                     move_uploaded_file($fileTemp, $destFilePath);
                 } catch (\Exception $e) {
                     echo "File upload error: " . $e->getMessage();
                     die();
                 }
-                $sql = "INSERT INTO `files` (`id`, `name`,`user_id`, `directory_id`, `user_file_name`) VALUES (null, :name, :user_id, :directory_id, :user_file_name)";
-                $statement = $db->prepare($sql);
-                $statement->execute(['name' => $newFileName, 'user_id' => $id, 'directory_id' => $dirId, 'user_file_name' => $userFileName]);
+                FileDBRequest::createFile($newFileName, $this->userId, $dirId['id'], $userFileName);
                 http_response_code(200);
                 echo json_encode(array(
-                    "user_id" => $id,
-                    "directory_id" => $dirId,
+                    "user_id" => $this->userId,
+                    "directory_id" => $dirId['id'],
+                    "directory_name" => $dirName,
                     "file_name" => $userFileName,
                     "status" => "file created"
                 ));
             }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
-    /**
-     * @param \PDO $db
-     * @param string $id
-     * @param string $directoryName
-     * @return string
-     */
-    private static function getDirectoryId(\PDO $db, string $id, string $directoryName): string
-    {
-        $sql = "SELECT `id` FROM `folders` WHERE `name` = :directoryName AND `user_id` = :id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['directoryName' => $directoryName, 'id' => $id]);
-        $response = $statement->fetch(\PDO::FETCH_ASSOC);
-        return $response['id'];
-    }
 
     public function getFiles(): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("error" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            $sql = "SELECT f.name as directory, fs.name FROM `folders` f LEFT JOIN files fs ON f.id = fs.directory_id WHERE f.user_id = '$id'";
-            $statement = $db->query($sql);
-            $response = $statement->fetchAll(\PDO::FETCH_COLUMN | \PDO::FETCH_GROUP);
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = FileDBRequest::readFiles($this->userId);
             http_response_code(200);
             echo json_encode(array(
-                "user_id" => $id,
-                "response" => $response
+                "user_id" => $this->userId,
+                "data" => $response
             ));
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
     /**
-     * @param string $data
+     * @param string $fileId
      * @return void
      */
-    public function getCurrentFile(string $data): void
+    public function getCurrentFile(string $fileId): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("error" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            $sql = "SELECT fls.id, fls.user_file_name, f.name FROM `files` fls LEFT JOIN folders f ON fls.directory_id = f.id WHERE fls.id = :fileId and fls.user_id = '$id'";
-            $statement = $db->prepare($sql);
-            $statement->execute(['fileId' => $data]);
-            $response = $statement->fetch(\PDO::FETCH_ASSOC);
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = FileDBRequest::getFile($this->userId, $fileId);
             if (!$response) {
                 http_response_code(401);
-                echo json_encode(array("error" => "File with id: '{$data}' does not exist"));
+                echo json_encode(array("error" => "File with id: '{$fileId}' does not exist"));
                 die();
             } else {
                 http_response_code(200);
                 echo json_encode(array(
-                    "user_id" => $id,
+                    "user_id" => $this->userId,
                     "file_id" => $response['id'],
                     "directory" => $response['name'],
                     "response" => $response['user_file_name'],
                 ));
             }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
     /**
-     * @param string $data
+     * @param string $fileId
      * @return void
      */
-    public function deleteFile(string $data): void
+    public function deleteFile(string $fileId): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("error" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
-            $sql = "SELECT `name`, `user_file_name` FROM `files` WHERE `user_id` = '$id' AND `id` = :data";
-            $statement = $db->prepare($sql);
-            $statement->execute(['data' => $data]);
-            $response = $statement->fetchAll(\PDO::FETCH_ASSOC);
-            $userFileName = $response[0]['user_file_name'] ?? "";
-            $hashedFileName = $response[0]['name'] ?? "";
-            if (empty($response)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = FileDBRequest::getFile($this->userId, $fileId);
+            if (!$response) {
                 http_response_code(401);
-                echo json_encode(
-                    array(
-                        "user_id" => $id,
-                        "error" => "file_id: {$data} not exist"
-                    )
-                );
+                echo json_encode(array("error" => "file_id: {$fileId} not exist"));
                 die();
             } else {
+                $userFileName = $response['user_file_name'] ?? "";
+                $hashedFileName = $response['file_name'] ?? "";
                 $file = $_SERVER['DOCUMENT_ROOT'] . '/uploads/' . $hashedFileName;
                 if (file_exists($file)) {
                     unlink($file);
                 }
-                $sql = "DELETE FROM `files` WHERE `id` = :data";
-                $statement = $db->prepare($sql);
-                $statement->execute(['data' => $data]);
-
+                FileDBRequest::deleteFile($fileId);
                 http_response_code(200);
                 echo json_encode(array(
-                    "user_id" => $id,
-                    "file_id" => $data,
+                    "user_id" => $this->userId,
+                    "file_id" => $fileId,
                     "file_name" => $userFileName,
                     "status" => "deleted"
                 ));
             }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
     /**
      * @throws \Exception
      */
-    public function changeFile(): void
+    public function renameFile(): void
     {
-        session_start();
-        $db = Database::connect();
-        $id = $_SESSION['user_data']['userId'] ?? '';
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        if (!ValidationData::checkUser($db, $id)) {
-            http_response_code(401);
-            echo json_encode(array("message" => "User not exist"));
-            die();
-        }
-        if (CheckTokens::verifyUserToken($db, $token)) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
             $json = file_get_contents('php://input');
             if (!$json) {
                 http_response_code(401);
@@ -421,59 +328,36 @@ class File
                 die();
             }
             $obj = json_decode($json, true);
-            if(!isset($obj)) {
+            if (!isset($obj)) {
                 throw new \Exception('Bad JSON');
             }
-            $newDirectoryName = $obj['directory'] ?? '';
-            $fileName = $obj['file_name'] ?? '';
             $fileId = $obj['file_id'] ?? '';
-            if (!empty($newDirectoryName)) {
-                $sql = "SELECT `id`, `name` FROM `folders` WHERE `name` = :newDirectoryName AND `user_id` = '$id'";
-                $statement = $db->prepare($sql);
-                $statement->execute(['newDirectoryName' => $newDirectoryName]);
-                $response = $statement->fetch(\PDO::FETCH_ASSOC);
-                if ($response) {
-                    $directoryId = $response['id'];
-                    $directoryName = $response['name'];
-                    $sql = "UPDATE `files` SET `directory_id` = '$directoryId' WHERE `user_file_name` = :fileName AND `user_id` = '$id'";
-                    $statement = $db->prepare($sql);
-                    $statement->execute(['fileName' => $fileName]);
+            $fileName = $obj['file_name'] ?? '';
+
+            $response = FileDBRequest::getFile($this->userId, $fileId);
+            $checkFile = ValidationData::checkFileExistence($response['user_file_name'], $this->userId, $response['dir_id']);
+
+            if (!$response) {
+                http_response_code(401);
+                echo json_encode(array("error" => "File with id: '{$fileId}' does not exist"));
+                die();
+            } else {
+                if ($checkFile) {
+                    FileDBRequest::updateFile($fileName, $fileId, $this->userId);
                     http_response_code(200);
                     echo json_encode(array(
-                        "user_id" => $id,
-                        "directory_id" => $directoryId,
-                        "directory_name" => $directoryName,
-                        "file" => $fileName,
-                        "status" => "updated"
+                        "user_id" => $this->userId,
+                        "file_id" => $fileId,
+                        "status" => "file updated"
                     ));
                 } else {
-                    http_response_code(401);
-                    echo json_encode(array("error" => "Directory not exist"));
+                    echo json_encode(array("error" => "File exists. Rename file"));
+                    die();
                 }
             }
-            if (!empty($fileId) && !empty($fileName)) {
-                $sql = "SELECT `id`, `user_file_name` as name FROM `files` WHERE `id` = :fileId AND `user_id` = '$id'";
-                $statement = $db->prepare($sql);
-                $statement->execute(['fileId' => $fileId]);
-                $response = $statement->fetch(\PDO::FETCH_ASSOC);
-                if ($response) {
-                    $oldFileName = $response['name'];
-                    $checkId = $response['id'];
-                    $sql = "UPDATE `files` SET `user_file_name` = :fileName WHERE `id` = ' $checkId' AND `user_id` = '$id'";
-                    $statement = $db->prepare($sql);
-                    $statement->execute(['fileName' => $fileName]);
-                    http_response_code(200);
-                    echo json_encode(array(
-                        "user_id" => $id,
-                        "file_id" => $checkId,
-                        "file" => $oldFileName . " updated on " . $fileName,
-                        "status" => "success"
-                    ));
-                } else {
-                    http_response_code(401);
-                    echo json_encode(array("error" => "File not exist or file error"));
-                }
-            }
+        } else {
+            http_response_code(401);
+            echo json_encode(array("error" => "Page access denied"));
         }
     }
 
@@ -588,4 +472,6 @@ class File
             }
         }
     }
+
+
 }
