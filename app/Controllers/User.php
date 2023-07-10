@@ -12,8 +12,12 @@ class User
 {
     private string $token;
     private string $userId;
+    private string $id;
+    private string $name;
+    private string $login;
+    private string $email;
 
-    /**
+     /**
      * @return  SessionService
      */
     private static function startSessionUser(): SessionService
@@ -28,6 +32,21 @@ class User
         $this->userId = $data['id'];
     }
 
+    /**
+     * @param array $obj
+     * @return void
+     * @throws \Exception
+     */
+    private function getJson(array $obj): void
+    {
+        if (!isset($obj)) {
+            throw new \Exception('Bad JSON');
+        }
+        $this->id = $obj['id'] ?? '';
+        $this->name = $obj['name'] ?? '';
+        $this->login = $obj['login'] ?? '';
+        $this->email = $obj['email'] ?? '';
+    }
 
     public function showUserList(): void
     {
@@ -102,21 +121,15 @@ class User
                 die();
             }
             $obj = json_decode($json, true);
-            if (!isset($obj)) {
-                throw new \Exception('Bad JSON');
-            }
-            $id = $obj['id'] ?? '';
-            $name = $obj['name'] ?? '';
-            $login = $obj['login'] ?? '';
-            $email = $obj['email'] ?? '';
-            if (!ValidationData::checkUser($id)) {
+            $this->getJson($obj);
+            if (!ValidationData::checkUser($this->id)) {
                 http_response_code(400);
                 echo json_encode(array("error" => "User not found"));
                 die();
             } else {
-                UserDbRequest::updateUserDbRequest($name, $login, $email, $id);
+                UserDbRequest::updateUserDbRequest($this->name, $this->login, $this->email, $this->id);
                 http_response_code(200);
-                echo json_encode(array("message" => "User with id: {$id} was updated"));
+                echo json_encode(array("message" => "User with id: {$this->id} was updated"));
             }
         } else {
             http_response_code(401);
@@ -197,19 +210,13 @@ class User
                 die();
             }
             $obj = json_decode($json, true);
-            if (!isset($obj)) {
-                throw new \Exception('Bad JSON');
-            }
-            $id = $obj['id'] ?? '';
-            $name = $obj['name'] ?? '';
-            $login = $obj['login'] ?? '';
-            $email = $obj['email'] ?? '';
-            if ((int)$id != $this->userId) {
+            $this->getJSON($obj);
+            if ($this->id !== $this->userId) {
                 http_response_code(401);
                 echo json_encode(array("error" => "Cancel operation. Data error"));
                 die();
             }
-            UserDbRequest::updateUserDbRequest($name, $login, $email, $id);
+            UserDbRequest::updateUserDbRequest($this->name, $this->login, $this->email, $this->id);
             http_response_code(200);
             echo json_encode(array("message" => "User updated"));
         } else {

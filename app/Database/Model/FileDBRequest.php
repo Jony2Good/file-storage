@@ -68,5 +68,41 @@ class FileDBRequest extends DbRequests
         self::write($sql, $data);
     }
 
+    /**
+     * @param string $userId
+     * @param string $fileId
+     * @return void
+     */
+    public static function createFileAccess(string $userId, string $fileId): void
+    {
+        $sql = "INSERT INTO `users_files` (`id`, `user_id`, `file_id`) VALUES (null, :user_id, :fileId)";
+        $data = ['user_id' => $userId, 'fileId' => $fileId];
+        self::write($sql, $data);
+    }
+
+    /**
+     * @param string $userId
+     * @param String $fileId
+     * @return array|bool
+     */
+    public static function readShareFiles(string $userId, string $fileId): array|bool
+    {
+        $sql = "SELECT f.user_file_name, uf.user_id  FROM `users_files` uf LEFT JOIN files f ON f.id = uf.file_id WHERE f.user_id = :userId AND uf.file_id = :fileId";
+        $data = ['userId' => $userId, 'fileId' => $fileId];
+        return self::read($sql, $data, self::FETCH_GROUP);
+    }
+
+    /**
+     * @param string $userId
+     * @param string $fileId
+     * @return void
+     */
+    public static function deleteAccessFile(string $userId, string $fileId): void
+    {
+        $sql = "DELETE FROM `users_files` WHERE `file_id` = :fileId AND `user_id` = :userId";
+        $data = ['fileId' => $fileId, 'userId' => $userId];
+        self::write($sql, $data);
+    }
+
 
 }

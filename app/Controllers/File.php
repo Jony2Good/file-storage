@@ -2,13 +2,12 @@
 
 namespace app\Controllers;
 
-use app\Database\Database;
+
 use app\Database\Model\DirectoryDbRequest;
 use app\Database\Model\FileDBRequest;
 use app\Services\Tokens;
 use app\Services\CreateSession;
 use app\Services\Interface\SessionService;
-use app\Services\Roles;
 use app\Services\ValidationData;
 
 class File extends DirectoryDbRequest
@@ -17,6 +16,8 @@ class File extends DirectoryDbRequest
     private string $userId;
 
     private string $parentDir;
+    private string $fileId;
+    private string $fileName;
 
     public function __construct()
     {
@@ -36,6 +37,20 @@ class File extends DirectoryDbRequest
         $this->token = $data['token'];
         $this->userId = $data['id'];
         $this->parentDir = $_SERVER['DOCUMENT_ROOT'] . '/uploads/';
+    }
+
+    /**
+     * @param array $obj
+     * @return void
+     * @throws \Exception
+     */
+    private function getJson(array $obj): void
+    {
+        if (!isset($obj)) {
+            throw new \Exception('Bad JSON');
+        }
+        $this->fileId = $obj['file_id'] ?? '';
+        $this->fileName = $obj['file_name'] ?? '';
     }
 
     /**
@@ -328,22 +343,18 @@ class File extends DirectoryDbRequest
                 die();
             }
             $obj = json_decode($json, true);
-            if (!isset($obj)) {
-                throw new \Exception('Bad JSON');
-            }
-            $fileId = $obj['file_id'] ?? '';
-            $fileName = $obj['file_name'] ?? '';
+            $this->getJson($obj);
 
-            $response = FileDBRequest::getFile($this->userId, $fileId);
+            $response = FileDBRequest::getFile($this->userId, $this->fileId);
             $checkFile = ValidationData::checkFileExistence($response['user_file_name'], $this->userId, $response['dir_id']);
 
             if (!$response) {
                 http_response_code(401);
-                echo json_encode(array("error" => "File with id: '{$fileId}' does not exist"));
+                echo json_encode(array("error" => "File with id: '{$this->fileId}' does not exist"));
                 die();
             } else {
                 if ($checkFile) {
-                    FileDBRequest::updateFile($fileName, $fileId, $this->userId);
+                    FileDBRequest::updateFile($this->fileName, $this->fileId, $this->userId);
                     http_response_code(200);
                     echo json_encode(array(
                         "user_id" => $this->userId,
@@ -351,6 +362,7 @@ class File extends DirectoryDbRequest
                         "status" => "file updated"
                     ));
                 } else {
+                    http_response_code(400);
                     echo json_encode(array("error" => "File exists. Rename file"));
                     die();
                 }
@@ -362,21 +374,14 @@ class File extends DirectoryDbRequest
     }
 
     /**
-     * @param string $id
+     * @param string $fileId
      * @return void
-     * @throws \Exception
      */
-    public function getSharingFiles(string $id): void
+    public function getSharingFiles(string $fileId): void
     {
-        session_start();
-        $db = Database::connect();
-        $user = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $user)) {
-            $sql = "SELECT f.user_file_name, uf.user_id  FROM `users_files` uf 
-                    LEFT JOIN files f ON f.id = uf.file_id WHERE uf.file_id = '$id'";
-            $statement = $db->prepare($sql);
-            $statement->execute();
-            $response = $statement->fetchAll(\PDO::FETCH_GROUP | \PDO::FETCH_COLUMN);
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = FileDBRequest::readShareFiles($this->userId, $fileId);
             if (!$response) {
                 http_response_code(401);
                 echo json_encode(array("error" => "File not exist or file error"));
@@ -396,40 +401,29 @@ class File extends DirectoryDbRequest
 
     /**
      * @param string $fileId
-     * @param string $userId
+     * @param string $tempUserId
      * @return void
-     * @throws \Exception
      */
-    public function grantAccessFile(string $fileId, string $userId): void
+    public function grantAccessFile(string $fileId, string $tempUserId): void
     {
-        session_start();
-        $db = Database::connect();
-        $user = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $user)) {
-            $sql = "SELECT `id`, `user_file_name` as file_name FROM `files` WHERE `id` = '$fileId'";
-            $statement = $db->prepare($sql);
-            $statement->execute();
-            $response = $statement->fetch(\PDO::FETCH_ASSOC);
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = FileDBRequest::getFile($this->userId, $fileId);
             if (!$response) {
                 http_response_code(401);
                 echo json_encode(array("error" => "File not exist or file error"));
                 die();
             } else {
-                $sql = "SELECT `id` FROM `users_files` WHERE `user_id` = '$userId' AND `file_id` = '$fileId'";
-                $statement = $db->prepare($sql);
-                $statement->execute();
-                $res = $statement->fetchColumn();
+                $res = ValidationData::checkFileAccess($tempUserId, $fileId);
                 if ($res > 0) {
                     http_response_code(401);
-                    echo json_encode(array("error" => "User {$userId} already has access to the file {$fileId}"));
+                    echo json_encode(array("error" => "User {$tempUserId} already has access to the file {$fileId}"));
                     die();
                 } else {
-                    $sql = "INSERT INTO `users_files` (`id`, `user_id`, `file_id`) VALUES (null, :user_id, :fileId)";
-                    $statement = $db->prepare($sql);
-                    $statement->execute(['user_id' => $userId, 'fileId' => $fileId]);
+                    FileDBRequest::createFileAccess($tempUserId, $fileId);
                     http_response_code(200);
                     echo json_encode(array(
-                        "user" => $userId,
+                        "user" => $tempUserId,
                         "file" => $fileId,
                         "file_name" => $response['file_name'],
                         "status" => "file access granted"
@@ -441,31 +435,28 @@ class File extends DirectoryDbRequest
 
     /**
      * @param string $fileId
-     * @param string $userId
+     * @param string $tempUserId
      * @return void
      * @throws \Exception
      */
-    public function stopAccessingFile(string $fileId, string $userId): void
+    public function stopAccessingFile(string $fileId, string $tempUserId): void
     {
-        session_start();
-        $db = Database::connect();
-        $user = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $user)) {
-            $sql = "SELECT `id` FROM `users_files` WHERE `file_id` = :fileId AND `user_id` = :userId";
-            $statement = $db->prepare($sql);
-            $statement->execute(['fileId' => $fileId, 'userId' => $userId]);
-            $response = $statement->fetch(\PDO::FETCH_ASSOC);
-            if (!$response) {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            if (!FileDBRequest::getFile($this->userId, $fileId)) {
                 http_response_code(401);
-                echo json_encode(array("error" => "File not exist or user access error"));
+                echo json_encode(array("error" => "File not exist or file error"));
+                die();
+            }
+            if (!ValidationData::checkFileAccess($tempUserId, $fileId)) {
+                http_response_code(401);
+                echo json_encode(array("error" => "User {$tempUserId} has not access to the file {$fileId}"));
                 die();
             } else {
-                $sql = "DELETE FROM `users_files` WHERE `file_id` = :fileId AND `user_id` = :userId";
-                $statement = $db->prepare($sql);
-                $statement->execute(['fileId' => $fileId, 'userId' => $userId]);
+                FileDBRequest::deleteAccessFile($tempUserId, $fileId);
                 http_response_code(200);
                 echo json_encode(array(
-                    "user" => $userId,
+                    "user" => $tempUserId,
                     "file_id" => $fileId,
                     "status" => "file access terminated"
                 ));

@@ -54,20 +54,25 @@ class UserDbRequest extends DbRequests
         self::write($sql, $data);
     }
 
-    public static function searchUserDbRequest(string $email)
+    /**
+     * @param string $email
+     * @return array|bool
+     */
+    public static function searchUserDbRequest(string $email): array|bool
     {
-        $sql = "SELECT `name`, `email` FROM `users` WHERE `email` = :email";
+        $sql = "SELECT `id`, `name`, `email` FROM `users` WHERE `email` = :email";
         $data = ['email' => $email];
         return self::read($sql, $data, 2);
     }
 
-    public static function showUserDbRequest(string $id)
+    /**
+     * @param string $id
+     * @return array|bool
+     */
+    public static function showUserDbRequest(string $id): array|bool
     {
         $sql = "SELECT u.name as user_name, u.id, u.login,u.email, f.name as directory_name, fs.name as file_name FROM `users` u LEFT JOIN folders f ON u.id = f.user_id LEFT JOIN files fs ON f.id = fs.directory_id WHERE u.id = :id";
         $data = ['id' => $id];
         return self::read($sql, $data, 1);
     }
-
-
-
 }

@@ -3,6 +3,8 @@
 namespace app\Controllers;
 
 use app\Database\Model\AuthDbRequest;
+use app\Services\CreateSession;
+use app\Services\Interface\SessionService;
 use app\Services\Tokens;
 use app\Services\GeneratePass;
 use app\Services\SendMailPassword;
@@ -10,6 +12,54 @@ use app\Services\ValidationData;
 
 class Auth
 {
+    private string $name;
+
+    private string $login;
+
+    private string $email;
+
+    private string $password;
+    private string $pasConfirm;
+
+    private string $token;
+
+    private string $userId;
+
+    private string $resetEmail;
+    private string $tempPas;
+    private string $cookies;
+
+    /**
+     * @param $data
+     * @return void
+     */
+    private function getData($data): void
+    {
+        $this->name = $data["name"] ?? "";
+        $this->login = $data["login"] ?? "";
+        $this->email = $data["email"] ?? "";
+        $this->password = $data['password'] ?? "";
+        $this->pasConfirm = $data['password_confirm'] ?? "";
+    }
+
+    /**
+     * @return  SessionService
+     */
+    private static function startSessionUser(): SessionService
+    {
+        return new CreateSession();
+    }
+
+    private function setData(): void
+    {
+        $data = self::startSessionUser()->start();
+        $this->token = $data['token'];
+        $this->userId = $data['id'];
+        $this->tempPas = $data['tempPas'];
+        $this->cookies = $data['cookies'];
+        $this->resetEmail = $data['resetEmail'];
+    }
+
     /**
      * @param array<string> $data
      * @return void
@@ -17,27 +67,22 @@ class Auth
      */
     public function signUp(array $data): void
     {
-        $name = $data["name"] ?? "";
-        $login = $data["login"] ?? "";
-        $email = $data["email"] ?? "";
-        $password = $data['password'] ?? "";
-        $pasConfirm = $data['password_confirm'] ?? "";
-
-        if (!ValidationData::checkNameData($name) || !ValidationData::checkNameData($login) || !ValidationData::checkEmailData($email)) {
+        $this->getData($data);
+        if (!ValidationData::checkNameData($this->name) || !ValidationData::checkNameData($this->login) || !ValidationData::checkEmailData($this->email)) {
             http_response_code(400);
             echo json_encode(array("error" => "Entering personal information incorrect"));
             die();
         }
-        if (!ValidationData::checkEmailExistence($email)) {
+        if (!ValidationData::checkEmailExistence($this->email)) {
             http_response_code(400);
-            echo json_encode(array("error" => "Email {$email} is already exist"));
+            echo json_encode(array("error" => "Email {$this->email} is already exist"));
             die();
         }
-        if ($password === $pasConfirm) {
-            $passwordHash = password_hash($data["password"], PASSWORD_BCRYPT);
+        if ($this->password === $this->pasConfirm) {
+            $passwordHash = password_hash($this->password, PASSWORD_BCRYPT);
 
-            AuthDbRequest::signUpDB($name, $login, $email, $passwordHash);
-            AuthDbRequest::addRolesDB($email);
+            AuthDbRequest::signUpDB($this->name, $this->login, $this->email, $passwordHash);
+            AuthDbRequest::addRolesDB($this->email);
 
             http_response_code(200);
             echo json_encode(array("message" => "User created"));
@@ -54,33 +99,32 @@ class Auth
 
     public function login(array $data): void
     {
-        $email = $data['email'] ?? "";
-        $password = $data['password'] ?? "";
-        $users = AuthDbRequest::loginDbRequest($email);
+       $this->getData($data);
+        $users = AuthDbRequest::loginDbRequest($this->email);
         if (empty($users)) {
             http_response_code(401);
-            echo json_encode(array("error" => "User with email {$email} is not registered"));
+            echo json_encode(array("error" => "User with email {$this->email} is not registered"));
             die();
         } else {
             $userId = $users['id'];
             $usersPas = $users['password'];
-            if (!password_verify($password, $usersPas)) {
+            if (!password_verify($this->password, $usersPas)) {
                 http_response_code(400);
                 echo json_encode(array("error" => "Entering personal information incorrect"));
                 die();
             } else {
-                session_start();
-                $token = Tokens::createRandomToken();
+                $this->setData();
+                $this->token = Tokens::createRandomToken();
                 $_SESSION['user_data'] = [
-                    'sid' => $token,
+                    'sid' => $this->token,
                     'userId' => $userId,
-                    'email' => $email
+                    'email' => $this->email
                 ];
-                Tokens::createTokenDB($_SESSION['user_data']['sid'], $userId);
+                Tokens::createTokenDB($this->token, $userId);
                 http_response_code(200);
                 echo json_encode(array(
-                    "user_email" => $email,
-                    "token" => $token,
+                    "user_email" => $this->email,
+                    "token" => $this->token,
                     "status" => "Password confirmed"
                 ));
             }
@@ -92,16 +136,9 @@ class Auth
      */
     public function logout(): void
     {
-        session_start();
-        $sid = $_SESSION['user_data']['sid'] ?? '';
-        $userId = $_SESSION['user_data']['userId'] ?? '';
-
-        AuthDbRequest::logoutDbRequest($userId, $sid);
-
-        session_destroy();
-        foreach ($_SESSION as $key => $value) {
-            unset($_SESSION[$key]);
-        }
+        $this->setData();
+        AuthDbRequest::logoutDbRequest($this->userId, $this->token);
+        self::startSessionUser()->end();
         echo json_encode(array("message" => "You are logout from app"));
     }
 
@@ -111,27 +148,27 @@ class Auth
      */
     public function resetPassword(): void
     {
-        $email = $_GET['email'] ?? '';
-        if (!ValidationData::checkEmailData($email)) {
+        $this->getData($_GET);
+        if (!ValidationData::checkEmailData($this->email)) {
             http_response_code(400);
             echo json_encode(array("error" => "Entering personal information incorrect"));
             die();
         } else {
-            $data = AuthDbRequest::resetPassDbRequest($email);
+            $data = AuthDbRequest::resetPassDbRequest($this->email);
             if (!$data) {
                 http_response_code(404);
                 echo json_encode(array("message" => "User not found"));
                 die();
             } else {
                 session_start();
-                $_SESSION['reset_email'] = $email;
+                $_SESSION['reset_email'] = $this->email;
                 $token = Tokens::createRandomToken();
                 $tempPass = $_SESSION['temporary_pass'] = GeneratePass::createPassword();
 
-                ValidationData::checkTemporaryPassword($email, $token, $tempPass);
+                ValidationData::checkTemporaryPassword($this->email, $token, $tempPass);
 
                 $mail = new SendMailPassword();
-                $mail->sendMail($email);
+                $mail->sendMail($this->email);
 
                 setcookie('reset_pas', $token, time() + 3600);
 
@@ -146,23 +183,22 @@ class Auth
      */
     public function changePassword(array $post): void
     {
-        session_start();
-        $email = $_SESSION['reset_email'] ?? '';
-        $temporaryPas = $_SESSION['temporary_pass'] ?? '';
-        $cookiesToken = $_COOKIE['reset_pas'] ?? '';
-        if (empty($cookiesToken)) {
+        $this->setData();
+        if (empty($this->cookies)) {
             http_response_code(401);
             echo json_encode(array("message" => "You do not have access to this page"));
             die();
         }
-        if (!empty($email) && !empty($temporaryPas)) {
-            $data = AuthDbRequest::getPassDbRequest($email, $cookiesToken, $temporaryPas);
+        if (!empty($this->resetEmail) && !empty($this->tempPas)) {
+            $data = AuthDbRequest::getPassDbRequest($this->resetEmail, $this->cookies, $this->tempPas);
             if (isset($data['email']) && isset($data['cookies_token']) && isset($data['temporary_pass'])) {
                 $newPass = $post['password'] ?? '';
                 $newPassConfirm = $post['password_confirm'] ?? '';
+
                 $userEmail = $data['email'];
                 $userPas = $data['temporary_pass'];
                 $userCookies = $data['cookies_token'];
+
                 if ($newPass === $newPassConfirm) {
                     $passwordHash = password_hash($newPass, PASSWORD_BCRYPT);
 

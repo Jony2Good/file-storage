@@ -24,8 +24,8 @@ class Tokens extends DbRequests
     {
         $sql = "SELECT `token` FROM `tokens` WHERE `user_id` = :userId";
         $data = ['userId' => $userId];
-        $response = self::read($sql, $data, 3);
-        if ($response > 1) {
+        $response = self::read($sql, $data, self::FETCH);
+        if ($response) {
             $req = "UPDATE `tokens` SET `token` = '$token' WHERE `user_id` = '$userId'";
         } else {
             $req = "INSERT INTO `tokens` (`token`, `user_id`) VALUES ('$token', '$userId')";
@@ -42,7 +42,7 @@ class Tokens extends DbRequests
         if (!empty($token)) {
             $sql = "SELECT `token`, `user_id` FROM `tokens` WHERE `token` = :token";
             $data = ['token' => $token];
-            $statement = self::read($sql, $data, 1);
+            $statement = self::read($sql, $data, self::FETCH);
             if ($statement) {
                 return true;
             }

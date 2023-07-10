@@ -2,7 +2,6 @@
 
 namespace app\Services;
 
-use app\Database\Database;
 use app\Database\DbRequests;
 
 class ValidationData extends DbRequests
@@ -44,7 +43,7 @@ class ValidationData extends DbRequests
     {
         $sql = "SELECT `id` FROM `users` WHERE `id` = :id";
         $data = ['id' => $id];
-        $row = DbRequests::read($sql, $data, 1);
+        $row = DbRequests::read($sql, $data, self::FETCH);
         if (!$row) {
             return false;
         } else {
@@ -60,7 +59,7 @@ class ValidationData extends DbRequests
     {
         $sql = "SELECT * FROM `users` WHERE `email` = :email";
         $data = ['email' => $email];
-        $response = DbRequests::read($sql, $data, 3);
+        $response = DbRequests::read($sql, $data, self::FETCH_COLUMN);
         if ($response > 1) {
             return false;
         }
@@ -77,7 +76,7 @@ class ValidationData extends DbRequests
     {
         $sql = "SELECT `id` FROM `reset_pas` WHERE `email` = :email";
         $data = ['email' => $email];
-        $response = self::read($sql, $data, 3);
+        $response = self::read($sql, $data, self::FETCH_COLUMN);
         if ($response > 1) {
             $stm = "UPDATE `reset_pas` SET `cookies_token` = '$token', `temporary_pass` = '$tempPass' WHERE `email` = '$email'";
         } else {
@@ -90,7 +89,7 @@ class ValidationData extends DbRequests
     {
         $sql = "SELECT u.id, r.group_name FROM `users` u INNER JOIN users_roles ur ON u.id = ur.user_id INNER JOIN roles r ON ur.roles_id = r.id WHERE u.id = :user_id AND r.group_name = 'admin'";
         $data = ['user_id' => $userId];
-        $statement = self::read($sql, $data, 1);
+        $statement = self::read($sql, $data, self::FETCH);
         if (!$statement) {
             return false;
         } else {
@@ -108,7 +107,7 @@ class ValidationData extends DbRequests
     {
         $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = :user_id AND `directory_id` = :directory_id";
         $data = ['user_file' => $userFile, 'user_id' => $userId, 'directory_id' => $dirId];
-        $row = self::read($sql, $data, 3);
+        $row = self::read($sql, $data, self::FETCH_COLUMN);
         if ($row > 1) {
             return false;
         } else {
@@ -125,7 +124,7 @@ class ValidationData extends DbRequests
     {
         $sql = "SELECT `name`, `id` FROM `folders` WHERE `name` = :dirName AND `user_id` = :userId";
         $data = ['dirName' => $dirName, 'userId' => $userId];
-        $response = self::read($sql, $data, 2);
+        $response = self::read($sql, $data, self::FETCH_All);
 
         if (empty($response)) {
             return false;
@@ -185,6 +184,18 @@ class ValidationData extends DbRequests
             $arr['filename'] = $m[3];
         }
         return $arr;
+    }
+
+    /**
+     * @param string $fileUser
+     * @param string $fileId
+     * @return string|bool
+     */
+    public static function checkFileAccess(string $fileUser, string $fileId): string|bool
+    {
+        $sql = "SELECT `id` FROM `users_files` WHERE `user_id` = :fileUser AND `file_id` = :fileId";
+        $data = ['fileUser' => $fileUser, 'fileId' => $fileId];
+        return self::read($sql, $data, self::FETCH_COLUMN);
     }
 
 }
