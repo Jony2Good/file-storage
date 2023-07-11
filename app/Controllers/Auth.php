@@ -3,6 +3,7 @@
 namespace app\Controllers;
 
 use app\Database\Model\AuthDbRequest;
+use app\HTTP\Response\ServerResponse;
 use app\Services\CreateSession;
 use app\Services\Interface\SessionService;
 use app\Services\Tokens;
@@ -69,26 +70,20 @@ class Auth
     {
         $this->getData($data);
         if (!ValidationData::checkNameData($this->name) || !ValidationData::checkNameData($this->login) || !ValidationData::checkEmailData($this->email)) {
-            http_response_code(400);
-            echo json_encode(array("error" => "Entering personal information incorrect"));
+            ServerResponse::createResponse(14, 400);
             die();
         }
         if (!ValidationData::checkEmailExistence($this->email)) {
-            http_response_code(400);
-            echo json_encode(array("error" => "Email {$this->email} is already exist"));
+            ServerResponse::createResponse(15, 400);
             die();
         }
         if ($this->password === $this->pasConfirm) {
             $passwordHash = password_hash($this->password, PASSWORD_BCRYPT);
-
             AuthDbRequest::signUpDB($this->name, $this->login, $this->email, $passwordHash);
             AuthDbRequest::addRolesDB($this->email);
-
-            http_response_code(200);
-            echo json_encode(array("message" => "User created"));
+            ServerResponse::createResponse(16);
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Incorrectly entered email or password"));
+            ServerResponse::createResponse(14, 400);
         }
     }
 
@@ -99,18 +94,16 @@ class Auth
 
     public function login(array $data): void
     {
-       $this->getData($data);
+        $this->getData($data);
         $users = AuthDbRequest::loginDbRequest($this->email);
         if (empty($users)) {
-            http_response_code(401);
-            echo json_encode(array("error" => "User with email {$this->email} is not registered"));
+            ServerResponse::createResponseList("User with email {$this->email} is not registered", 400);
             die();
         } else {
             $userId = $users['id'];
             $usersPas = $users['password'];
             if (!password_verify($this->password, $usersPas)) {
-                http_response_code(400);
-                echo json_encode(array("error" => "Entering personal information incorrect"));
+                ServerResponse::createResponse(14, 400);
                 die();
             } else {
                 $this->setData();
@@ -121,12 +114,11 @@ class Auth
                     'email' => $this->email
                 ];
                 Tokens::createTokenDB($this->token, $userId);
-                http_response_code(200);
-                echo json_encode(array(
+                ServerResponse::createResponseList([
                     "user_email" => $this->email,
                     "token" => $this->token,
                     "status" => "Password confirmed"
-                ));
+                ]);
             }
         }
     }
@@ -139,7 +131,7 @@ class Auth
         $this->setData();
         AuthDbRequest::logoutDbRequest($this->userId, $this->token);
         self::startSessionUser()->end();
-        echo json_encode(array("message" => "You are logout from app"));
+        ServerResponse::createResponse(17);
     }
 
     /**
@@ -150,21 +142,18 @@ class Auth
     {
         $this->getData($_GET);
         if (!ValidationData::checkEmailData($this->email)) {
-            http_response_code(400);
-            echo json_encode(array("error" => "Entering personal information incorrect"));
+            ServerResponse::createResponse(14, 400);
             die();
         } else {
             $data = AuthDbRequest::resetPassDbRequest($this->email);
             if (!$data) {
-                http_response_code(404);
-                echo json_encode(array("message" => "User not found"));
+                ServerResponse::createResponse(10, 404);
                 die();
             } else {
                 session_start();
                 $_SESSION['reset_email'] = $this->email;
                 $token = Tokens::createRandomToken();
                 $tempPass = $_SESSION['temporary_pass'] = GeneratePass::createPassword();
-
                 ValidationData::checkTemporaryPassword($this->email, $token, $tempPass);
 
                 $mail = new SendMailPassword();
@@ -172,7 +161,7 @@ class Auth
 
                 setcookie('reset_pas', $token, time() + 3600);
 
-                echo json_encode(array("message" => "You temporary password is {$tempPass}"));
+                ServerResponse::createResponseList("You temporary password is {$tempPass}");
             }
         }
     }
@@ -185,8 +174,7 @@ class Auth
     {
         $this->setData();
         if (empty($this->cookies)) {
-            http_response_code(401);
-            echo json_encode(array("message" => "You do not have access to this page"));
+            ServerResponse::createResponse(3, 401);
             die();
         }
         if (!empty($this->resetEmail) && !empty($this->tempPas)) {
@@ -208,16 +196,13 @@ class Auth
                     unset($_COOKIE['reset_pas']);
                     setcookie('reset_pas', "", -1, '/');
                 } else {
-                    http_response_code(401);
-                    echo json_encode(array("message" => "Password mismatch"));
+                    ServerResponse::createResponse(18, 404);
                     die();
                 }
             }
-            http_response_code(200);
-            echo json_encode(array("message" => "Password changed successfully"));
+            ServerResponse::createResponse(19);
         } else {
-            http_response_code(400);
-            echo json_encode(array("message" => "Error in data processing on the server"));
+            ServerResponse::createResponse(20, 503);
             die();
         }
     }

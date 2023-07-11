@@ -3,6 +3,7 @@
 namespace app\Controllers;
 
 use app\Database\Model\UserDbRequest;
+use app\HTTP\Response\ServerResponse;
 use app\Services\CreateSession;
 use app\Services\Interface\SessionService;
 use app\Services\Tokens;
@@ -17,7 +18,7 @@ class User
     private string $login;
     private string $email;
 
-     /**
+    /**
      * @return  SessionService
      */
     private static function startSessionUser(): SessionService
@@ -33,12 +34,17 @@ class User
     }
 
     /**
-     * @param array $obj
      * @return void
      * @throws \Exception
      */
-    private function getJson(array $obj): void
+    private function getJson(): void
     {
+        $json = file_get_contents('php://input');
+        if (!$json) {
+            ServerResponse::createResponse(1, 400);
+            die();
+        }
+        $obj = json_decode($json, true);
         if (!isset($obj)) {
             throw new \Exception('Bad JSON');
         }
@@ -53,11 +59,9 @@ class User
         $this->setData();
         if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
             $response = UserDbRequest::showUsersDbRequest();
-            http_response_code(200);
-            echo json_encode($response);
+            ServerResponse::createResponseList($response);
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -69,17 +73,15 @@ class User
     {
         $this->setData();
         if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
-            $user = UserDbRequest::getUserDbRequest($id);
-            if (!$user) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+            $response = UserDbRequest::getUserDbRequest($id);
+            if (!$response) {
+                ServerResponse::createResponse(10, 400);
+                die();
             } else {
-                http_response_code(200);
-                echo json_encode($user);
+                ServerResponse::createResponseList($response);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -92,17 +94,14 @@ class User
         $this->setData();
         if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
             if (!ValidationData::checkUser($id)) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+                ServerResponse::createResponse(10, 400);
                 die();
             } else {
                 UserDbRequest::deleteUserDbRequest($id);
-                http_response_code(200);
-                echo json_encode(array("message" => "User with id: {$id} was deleted"));
+                ServerResponse::createResponse(11);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -114,26 +113,16 @@ class User
     {
         $this->setData();
         if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
-            $json = file_get_contents('php://input');
-            if (!$json) {
-                http_response_code(401);
-                echo json_encode(array("error" => "Failed with entry information"));
-                die();
-            }
-            $obj = json_decode($json, true);
-            $this->getJson($obj);
+            $this->getJson();
             if (!ValidationData::checkUser($this->id)) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+                ServerResponse::createResponse(10, 400);
                 die();
             } else {
                 UserDbRequest::updateUserDbRequest($this->name, $this->login, $this->email, $this->id);
-                http_response_code(200);
-                echo json_encode(array("message" => "User with id: {$this->id} was updated"));
+                ServerResponse::createResponse(12);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -145,18 +134,15 @@ class User
     {
         $this->setData();
         if (Tokens::verifyUserToken($this->token)) {
-            $user = UserDbRequest::searchUserDbRequest($email);
-            if (!$user) {
-                http_response_code(400);
-                echo json_encode(array("message" => "User not found"));
+            $response = UserDbRequest::searchUserDbRequest($email);
+            if (!$response) {
+                ServerResponse::createResponse(10, 400);
                 die();
             } else {
-                http_response_code(200);
-                echo json_encode(array("user" => $user));
+                ServerResponse::createResponseList($response);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -165,11 +151,9 @@ class User
         $this->setData();
         if (Tokens::verifyUserToken($this->token)) {
             $response = UserDbRequest::showUsersDbRequest();
-            http_response_code(200);
-            echo json_encode($response);
+            ServerResponse::createResponseList($response);
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -181,17 +165,14 @@ class User
     {
         $this->setData();
         if ((Tokens::verifyUserToken($this->token)) && ($id === $this->userId)) {
-            $user = UserDbRequest::showUserDbRequest($id);
-            if (!$user) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+            $response = UserDbRequest::showUserDbRequest($id);
+            if (!$response) {
+                ServerResponse::createResponse(10, 400);
             } else {
-                http_response_code(200);
-                echo json_encode($user);
+                ServerResponse::createResponseList($response);
             }
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -203,25 +184,15 @@ class User
     {
         $this->setData();
         if (Tokens::verifyUserToken($this->token)) {
-            $json = file_get_contents('php://input');
-            if (!$json) {
-                http_response_code(401);
-                echo json_encode(array("error" => "Failed with entry information"));
-                die();
-            }
-            $obj = json_decode($json, true);
-            $this->getJSON($obj);
+            $this->getJSON();
             if ($this->id !== $this->userId) {
-                http_response_code(401);
-                echo json_encode(array("error" => "Cancel operation. Data error"));
+                ServerResponse::createResponse(13, 401);
                 die();
             }
             UserDbRequest::updateUserDbRequest($this->name, $this->login, $this->email, $this->id);
-            http_response_code(200);
-            echo json_encode(array("message" => "User updated"));
+            ServerResponse::createResponse(12);
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -234,17 +205,13 @@ class User
         $this->setData();
         if (Tokens::verifyUserToken($this->token)) {
             if ($id !== $this->userId) {
-                http_response_code(401);
-                echo json_encode(array("error" => "Cancel operation. Data error"));
+                ServerResponse::createResponse(13, 401);
                 die();
             }
             UserDbRequest::deleteUserDbRequest($id);
-            http_response_code(200);
-            echo json_encode(array("message" => "User deleted"));
+            ServerResponse::createResponse(11);
         } else {
-            http_response_code(401);
-            echo json_encode(array("error" => "Page access denied"));
+            ServerResponse::createResponse(3, 401);
         }
-
     }
 }

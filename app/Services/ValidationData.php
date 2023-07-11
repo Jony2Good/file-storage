@@ -101,9 +101,9 @@ class ValidationData extends DbRequests
      * @param string $userFile
      * @param string $userId
      * @param int $dirId
-     * @return bool
+     * @return array|bool
      */
-    public static function checkFileExistence(string $userFile, string $userId, int $dirId): bool
+    public static function checkFileExistence(string $userFile, string $userId, int $dirId): array|bool
     {
         $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = :user_id AND `directory_id` = :directory_id";
         $data = ['user_file' => $userFile, 'user_id' => $userId, 'directory_id' => $dirId];
