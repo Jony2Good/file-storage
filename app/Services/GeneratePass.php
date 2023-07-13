@@ -26,13 +26,6 @@ class GeneratePass
         return $password;
     }
 
-    /**
-     * @param int $length
-     * @return string
-     */
-    public static function createToken(int $length = 16): string
-    {
-        return bin2hex(openssl_random_pseudo_bytes($length));
-    }
+
 
 }

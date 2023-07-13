@@ -2,13 +2,15 @@
 
 namespace app\Services;
 
-class ValidationData
+use app\Database\DbRequests;
+
+class ValidationData extends DbRequests
 {
     /**
      * @param string $data
      * @return bool
      */
-    public static function filterNameData(string $data): bool
+    public static function checkNameData(string $data): bool
     {
         $data = trim($data);
         $data = stripslashes($data);
@@ -23,7 +25,7 @@ class ValidationData
      * @param string $data
      * @return bool
      */
-    public static function filterEmailData(string $data): bool
+    public static function checkEmailData(string $data): bool
     {
         $data = filter_var(trim($data), FILTER_SANITIZE_EMAIL);
         if (filter_var($data, FILTER_VALIDATE_EMAIL)) {
@@ -34,16 +36,14 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
      * @param string $id
      * @return bool
      */
-    public static function checkUser(\PDO $db, string $id): bool
+    public static function checkUser(string $id): bool
     {
         $sql = "SELECT `id` FROM `users` WHERE `id` = :id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['id' => $id]);
-        $row = $statement->fetchColumn();
+        $data = ['id' => $id];
+        $row = DbRequests::read($sql, $data, self::FETCH);
         if (!$row) {
             return false;
         } else {
@@ -52,16 +52,14 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
      * @param string $email
      * @return bool
      */
-    public static function checkEmailExistence(\PDO $db, string $email): bool
+    public static function checkEmailExistence(string $email): bool
     {
         $sql = "SELECT * FROM `users` WHERE `email` = :email";
-        $statement = $db->prepare($sql);
-        $statement->execute(['email' => $email]);
-        $response = $statement->fetchColumn();
+        $data = ['email' => $email];
+        $response = DbRequests::read($sql, $data, self::FETCH_COLUMN);
         if ($response > 1) {
             return false;
         }
@@ -69,18 +67,47 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
-     * @param string $userFile
-     * @param string $id
-     * @param string $dirId
-     * @return bool
+     * @param string $email
+     * @param string $token
+     * @param string $tempPass
+     * @return void
      */
-    public static function checkFileExistence(\PDO $db, string $userFile, string $id, string $dirId): bool
+    public static function checkTemporaryPassword(string $email, string $token, string $tempPass): void
     {
-        $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = '$id' AND `directory_id` = :directory_id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['user_file' => $userFile, 'directory_id' => $dirId]);
-        $row = $statement->fetchColumn();
+        $sql = "SELECT `id` FROM `reset_pas` WHERE `email` = :email";
+        $data = ['email' => $email];
+        $response = self::read($sql, $data, self::FETCH_COLUMN);
+        if ($response > 1) {
+            $stm = "UPDATE `reset_pas` SET `cookies_token` = '$token', `temporary_pass` = '$tempPass' WHERE `email` = '$email'";
+        } else {
+            $stm = "INSERT INTO `reset_pas` (`id`, `email`, `cookies_token`,`temporary_pass`) VALUES (null, '$email', '$token', '$tempPass')";
+        }
+        self::query($stm);
+    }
+
+    public static function checkRoles(string $userId): bool
+    {
+        $sql = "SELECT u.id, r.group_name FROM `users` u INNER JOIN users_roles ur ON u.id = ur.user_id INNER JOIN roles r ON ur.roles_id = r.id WHERE u.id = :user_id AND r.group_name = 'admin'";
+        $data = ['user_id' => $userId];
+        $statement = self::read($sql, $data, self::FETCH);
+        if (!$statement) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    /**
+     * @param string $userFile
+     * @param string $userId
+     * @param int $dirId
+     * @return array|bool
+     */
+    public static function checkFileExistence(string $userFile, string $userId, int $dirId): array|bool
+    {
+        $sql = "SELECT `user_file_name` FROM `files` WHERE `user_file_name` = :user_file AND `user_id` = :user_id AND `directory_id` = :directory_id";
+        $data = ['user_file' => $userFile, 'user_id' => $userId, 'directory_id' => $dirId];
+        $row = self::read($sql, $data, self::FETCH_COLUMN);
         if ($row > 1) {
             return false;
         } else {
@@ -89,17 +116,16 @@ class ValidationData
     }
 
     /**
-     * @param \PDO $db
-     * @param string $folder
-     * @param string $id
+     * @param string $dirName
+     * @param string $userId
      * @return bool
      */
-    public static function checkFolderExistence(\PDO $db, string $folder, string $id): bool
+    public static function checkFolderExistence(string $dirName, string $userId): bool
     {
-        $sql = "SELECT `name`, `id` FROM `folders` WHERE `name` = :folder AND `user_id` = :id";
-        $statement = $db->prepare($sql);
-        $statement->execute(['folder' => $folder, 'id' => $id]);
-        $response = $statement->fetchAll(\PDO::FETCH_ASSOC);
+        $sql = "SELECT `name`, `id` FROM `folders` WHERE `name` = :dirName AND `user_id` = :userId";
+        $data = ['dirName' => $dirName, 'userId' => $userId];
+        $response = self::read($sql, $data, self::FETCH_All);
+
         if (empty($response)) {
             return false;
         }
@@ -158,6 +184,18 @@ class ValidationData
             $arr['filename'] = $m[3];
         }
         return $arr;
+    }
+
+    /**
+     * @param string $fileUser
+     * @param string $fileId
+     * @return string|bool
+     */
+    public static function checkFileAccess(string $fileUser, string $fileId): string|bool
+    {
+        $sql = "SELECT `id` FROM `users_files` WHERE `user_id` = :fileUser AND `file_id` = :fileId";
+        $data = ['fileUser' => $fileUser, 'fileId' => $fileId];
+        return self::read($sql, $data, self::FETCH_COLUMN);
     }
 
 }

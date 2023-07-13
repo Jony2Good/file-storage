@@ -2,25 +2,66 @@
 
 namespace app\Controllers;
 
-use app\Database\Database;
-use app\Services\CheckTokens;
-use app\Services\Roles;
+use app\Database\Model\UserDbRequest;
+use app\HTTP\Response\ServerResponse;
+use app\Services\CreateSession;
+use app\Services\Interface\SessionService;
+use app\Services\Tokens;
+use app\Services\ValidationData;
 
 class User
 {
+    private string $token;
+    private string $userId;
+    private string $id;
+    private string $name;
+    private string $login;
+    private string $email;
+
+    /**
+     * @return  SessionService
+     */
+    private static function startSessionUser(): SessionService
+    {
+        return new CreateSession();
+    }
+
+    private function setData(): void
+    {
+        $data = self::startSessionUser()->start();
+        $this->token = $data['token'];
+        $this->userId = $data['id'];
+    }
+
+    /**
+     * @return void
+     * @throws \Exception
+     */
+    private function getJson(): void
+    {
+        $json = file_get_contents('php://input');
+        if (!$json) {
+            ServerResponse::createResponse(1, 400);
+            die();
+        }
+        $obj = json_decode($json, true);
+        if (!isset($obj)) {
+            throw new \Exception('Bad JSON');
+        }
+        $this->id = $obj['id'] ?? '';
+        $this->name = $obj['name'] ?? '';
+        $this->login = $obj['login'] ?? '';
+        $this->email = $obj['email'] ?? '';
+    }
+
     public function showUserList(): void
     {
-        session_start();
-        $db = Database::connect();
-        $token = $_SESSION['user_data']['sid'] ?? '';
-        $userID = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $userID)) {
-            if (CheckTokens::verifyUserToken($db, $token)) {
-                $statement = $db->query("SELECT `id`, `name`,`login`, `email`, `date_created` FROM `users`");
-                $response = $statement->fetchAll(\PDO::FETCH_ASSOC);
-                http_response_code(200);
-                echo json_encode($response);
-            }
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
+            $response = UserDbRequest::showUsersDbRequest();
+            ServerResponse::createResponseList($response);
+        } else {
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -30,21 +71,17 @@ class User
      */
     public function getUser(string $id): void
     {
-        session_start();
-        $db = Database::connect();
-        $userID = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $userID)) {
-            $sql = "SELECT u.id, u.name,u.login, r.group_name as role, u.email, u.date_created FROM `users` u LEFT JOIN `users_roles` ur ON ur.user_id = u.id LEFT JOIN `roles` r ON ur.roles_id = r.id WHERE u.id = :id";
-            $statement = $db->prepare($sql);
-            $statement->execute(['id' => $id]);
-            $user = $statement->fetchAll(\PDO::FETCH_ASSOC);
-            if (!$user) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
+            $response = UserDbRequest::getUserDbRequest($id);
+            if (!$response) {
+                ServerResponse::createResponse(10, 400);
+                die();
             } else {
-                http_response_code(200);
-                echo json_encode($user);
+                ServerResponse::createResponseList($response);
             }
+        } else {
+            ServerResponse::createResponse(3, 401);
         }
     }
 
@@ -54,71 +91,127 @@ class User
      */
     public function deleteUser(string $id): void
     {
-        session_start();
-        $db = Database::connect();
-        $userID = $_SESSION['user_data']['userId'] ?? '';
-        if (Roles::checkRoles($db, $userID)) {
-            $sql = "SELECT `id` FROM `users` WHERE `id` = :id";
-            $statement = $db->prepare($sql);
-            $statement->execute(['id' => $id]);
-            $user = $statement->fetchAll(\PDO::FETCH_ASSOC);
-            if (!$user) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
+            if (!ValidationData::checkUser($id)) {
+                ServerResponse::createResponse(10, 400);
                 die();
             } else {
-                $sql = 'DELETE FROM `users` WHERE id = :id';
-                $statement = $db->prepare($sql);
-                $statement->execute(['id' => $id]);
-                http_response_code(200);
-                echo json_encode(array("message" => "User with id: {$id} was deleted"));
+                UserDbRequest::deleteUserDbRequest($id);
+                ServerResponse::createResponse(11);
             }
+        } else {
+            ServerResponse::createResponse(3, 401);
         }
     }
 
     /**
+     * @return void
      * @throws \Exception
      */
-    public function update(): void
+    public function updateUser(): void
     {
-        session_start();
-        $db = Database::connect();
-        $userID = $_SESSION['user_data']['userId'] ?? '';
-        $json = file_get_contents('php://input');
-        if (!$json) {
-            http_response_code(401);
-            echo json_encode(array("error" => "Failed with entry information"));
-            die();
-        }
-        $obj = json_decode($json, true);
-        if (!isset($obj)) {
-            throw new \Exception('Bad JSON');
-        }
-        $id = $obj['id'] ?? '';
-        $name = $obj['name'] ?? '';
-        $login = $obj['login'] ?? '';
-        $email = $obj['email'] ?? '';
-        if (Roles::checkRoles($db, $userID)) {
-            $sql = "SELECT `id` FROM `users` WHERE `id` = :id";
-            $statement = $db->prepare($sql);
-            $statement->execute(['id' => $id]);
-            $user = $statement->fetchAll(\PDO::FETCH_ASSOC);
-            if (!$user) {
-                http_response_code(400);
-                echo json_encode(array("error" => "User not found"));
+        $this->setData();
+        if (ValidationData::checkRoles($this->userId) && Tokens::verifyUserToken($this->token)) {
+            $this->getJson();
+            if (!ValidationData::checkUser($this->id)) {
+                ServerResponse::createResponse(10, 400);
                 die();
             } else {
-                $sql = "UPDATE `users` SET `name` = :name, `login` = :login, `email` = :email WHERE `id` = :id";
-                $statement = $db->prepare($sql);
-                $statement->execute([
-                    'id' => $id,
-                    'name' => $name,
-                    'login' => $login,
-                    'email' => $email,
-                ]);
-                http_response_code(200);
-                echo json_encode(array("message" => "User with id: {$id} was updated"));
+                UserDbRequest::updateUserDbRequest($this->name, $this->login, $this->email, $this->id);
+                ServerResponse::createResponse(12);
             }
+        } else {
+            ServerResponse::createResponse(3, 401);
+        }
+    }
+
+    /**
+     * @param string $email
+     * @return void
+     */
+    public function searchUser(string $email): void
+    {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = UserDbRequest::searchUserDbRequest($email);
+            if (!$response) {
+                ServerResponse::createResponse(10, 400);
+                die();
+            } else {
+                ServerResponse::createResponseList($response);
+            }
+        } else {
+            ServerResponse::createResponse(3, 401);
+        }
+    }
+
+    public function showUsers(): void
+    {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $response = UserDbRequest::showUsersDbRequest();
+            ServerResponse::createResponseList($response);
+        } else {
+            ServerResponse::createResponse(3, 401);
+        }
+    }
+
+    /**
+     * @param string $id
+     * @return void
+     */
+    public function showOneUser(string $id): void
+    {
+        $this->setData();
+        if ((Tokens::verifyUserToken($this->token)) && ($id === $this->userId)) {
+            $response = UserDbRequest::showUserDbRequest($id);
+            if (!$response) {
+                ServerResponse::createResponse(10, 400);
+            } else {
+                ServerResponse::createResponseList($response);
+            }
+        } else {
+            ServerResponse::createResponse(3, 401);
+        }
+    }
+
+    /**
+     * @return void
+     * @throws \Exception
+     */
+    public function changeUserData(): void
+    {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            $this->getJSON();
+            if ($this->id !== $this->userId) {
+                ServerResponse::createResponse(13, 401);
+                die();
+            }
+            UserDbRequest::updateUserDbRequest($this->name, $this->login, $this->email, $this->id);
+            ServerResponse::createResponse(12);
+        } else {
+            ServerResponse::createResponse(3, 401);
+        }
+    }
+
+    /**
+     * @param string $id
+     * @return void
+     */
+    public function deleteOneUser(string $id): void
+    {
+        $this->setData();
+        if (Tokens::verifyUserToken($this->token)) {
+            if ($id !== $this->userId) {
+                ServerResponse::createResponse(13, 401);
+                die();
+            }
+            UserDbRequest::deleteUserDbRequest($id);
+            ServerResponse::createResponse(11);
+        } else {
+            ServerResponse::createResponse(3, 401);
         }
     }
 }

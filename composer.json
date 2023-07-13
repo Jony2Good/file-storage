@@ -1,16 +1,23 @@
 {
   "name": "cloud_storage/app",
   "description": "graduate_work",
-  "autoload": {
-    "psr-4": {
-      "app\\": "app/"
-    }
-  },
   "authors": [
     {
       "name": "Emelyanenko Artem"
     }
   ],
+  "autoload": {
+    "psr-4": {
+      "app\\": "app/"
+    },
+    "files": [
+      "config/db.php",
+      "config/headers.php",
+      "config/mail_settings.php",
+      "config/options.php",
+      "routes/routes.php"
+    ]
+  },
   "require": {
     "phpmailer/phpmailer": "^6.8"
   },
